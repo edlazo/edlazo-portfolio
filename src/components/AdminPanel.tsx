@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, LogOut, Check, Sparkles, FolderGit2, Cpu, User, Loader2, Save } from 'lucide-react';
+import { X, Plus, Trash2, LogOut, Check, Sparkles, FolderGit2, Cpu, User, Loader2, Save, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import type { SkillCategory, Project } from '../types/portfolio';
+import type { SkillCategory, Project, SkillItem } from '../types/portfolio';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
   saveSkillToSupabase,
+  updateSkillInSupabase,
   deleteSkillFromSupabase,
   upsertProjectToSupabase,
   deleteProjectFromSupabase,
@@ -35,18 +36,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const { language, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'skills' | 'projects' | 'profile'>('skills');
 
-  // Loading & feedback state
+  // Loading & notification state
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Skill editing state
+  // Skill state
+  const [editingSkillOldName, setEditingSkillOldName] = useState<string | null>(null);
   const [newSkillName, setNewSkillName] = useState('');
   const [selectedCatId, setSelectedCatId] = useState(skillCategories[0]?.id || 'backend');
   const [newSkillLevel, setNewSkillLevel] = useState('Intermediate');
   const [isPrimary, setIsPrimary] = useState(false);
 
-  // Project form state
+  // Project state
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [projectTitle, setProjectTitle] = useState('');
   const [projectTaglineEs, setProjectTaglineEs] = useState('');
@@ -58,6 +61,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [projectPeriod, setProjectPeriod] = useState(new Date().getFullYear().toString());
   const [projectStack, setProjectStack] = useState('React, TypeScript, Tailwind');
   const [projectImage, setProjectImage] = useState('/assets/semanita_app_mockup.png');
+  const [projectDemoUrl, setProjectDemoUrl] = useState('');
+  const [projectRepoUrl, setProjectRepoUrl] = useState('');
 
   // Profile form state
   const [profileEmail, setProfileEmail] = useState(HERO_DATA.socials.email);
@@ -76,35 +81,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }, 3000);
   };
 
-  // --- HANDLERS FOR SKILLS ---
-  const handleAddSkill = async (e: React.FormEvent) => {
+  // ----------------------------------------------------------------------
+  // SKILL HANDLERS
+  // ----------------------------------------------------------------------
+
+  const handleStartEditSkill = (catId: string, skill: SkillItem) => {
+    setEditingSkillOldName(skill.name);
+    setSelectedCatId(catId);
+    setNewSkillName(skill.name);
+    setNewSkillLevel(skill.level || 'Intermediate');
+    setIsPrimary(Boolean(skill.isPrimary));
+  };
+
+  const handleCancelEditSkill = () => {
+    setEditingSkillOldName(null);
+    setNewSkillName('');
+    setIsPrimary(false);
+  };
+
+  const handleSaveSkillForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSkillName.trim()) return;
 
     setIsSaving(true);
     const skillObj = { name: newSkillName.trim(), level: newSkillLevel, isPrimary };
 
-    // 1. Update Supabase if configured
     let dbSuccess = false;
-    if (isSupabaseConfigured) {
-      dbSuccess = await saveSkillToSupabase(selectedCatId, skillObj);
+    if (editingSkillOldName) {
+      // Edit existing skill
+      if (isSupabaseConfigured) {
+        dbSuccess = await updateSkillInSupabase(editingSkillOldName, selectedCatId, skillObj);
+      }
+
+      const updated = skillCategories.map((cat) => {
+        // remove old skill from whichever category it was in
+        const filteredSkills = cat.skills.filter((s) => s.name !== editingSkillOldName);
+        if (cat.id === selectedCatId) {
+          return {
+            ...cat,
+            skills: [...filteredSkills, skillObj],
+          };
+        }
+        return { ...cat, skills: filteredSkills };
+      });
+      onUpdateSkills(updated);
+      setEditingSkillOldName(null);
+    } else {
+      // Create new skill
+      if (isSupabaseConfigured) {
+        dbSuccess = await saveSkillToSupabase(selectedCatId, skillObj);
+      }
+
+      const updated = skillCategories.map((cat) => {
+        if (cat.id === selectedCatId) {
+          return {
+            ...cat,
+            skills: [...cat.skills, skillObj],
+          };
+        }
+        return cat;
+      });
+      onUpdateSkills(updated);
     }
 
-    // 2. Update local state
-    const updated = skillCategories.map((cat) => {
-      if (cat.id === selectedCatId) {
-        return {
-          ...cat,
-          skills: [...cat.skills, skillObj],
-        };
-      }
-      return cat;
-    });
-
-    onUpdateSkills(updated);
     setNewSkillName('');
     setIsSaving(false);
-    triggerSuccess(dbSuccess ? 'Skill guardado en Supabase y sitio local' : 'Skill guardado localmente');
+    triggerSuccess(dbSuccess ? 'Skill guardado en Supabase' : 'Skill guardado en local');
   };
 
   const handleDeleteSkill = async (catId: string, skillName: string) => {
@@ -127,14 +169,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     triggerSuccess('Skill eliminado');
   };
 
-  // --- HANDLERS FOR PROJECTS ---
-  const handleAddProject = async (e: React.FormEvent) => {
+  const handleMoveSkill = (catId: string, index: number, direction: 'up' | 'down') => {
+    const updated = skillCategories.map((cat) => {
+      if (cat.id === catId) {
+        const skillsCopy = [...cat.skills];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= skillsCopy.length) return cat;
+
+        const temp = skillsCopy[index];
+        skillsCopy[index] = skillsCopy[targetIndex];
+        skillsCopy[targetIndex] = temp;
+        return { ...cat, skills: skillsCopy };
+      }
+      return cat;
+    });
+
+    onUpdateSkills(updated);
+    triggerSuccess('Orden de habilidades actualizado');
+  };
+
+  // ----------------------------------------------------------------------
+  // PROJECT HANDLERS
+  // ----------------------------------------------------------------------
+
+  const handleStartEditProject = (proj: Project) => {
+    setEditingProjectId(proj.id);
+    setProjectTitle(proj.title);
+    setProjectTaglineEs(proj.tagline.es);
+    setProjectTaglineEn(proj.tagline.en);
+    setProjectSummaryEs(proj.summary.es);
+    setProjectSummaryEn(proj.summary.en);
+    setProjectRoleEs(proj.role.es);
+    setProjectRoleEn(proj.role.en);
+    setProjectPeriod(proj.period || new Date().getFullYear().toString());
+    setProjectStack(proj.stack.join(', '));
+    setProjectImage(proj.image);
+    setProjectDemoUrl(proj.demoUrl || '');
+    setProjectRepoUrl(proj.repoUrl || '');
+    setShowProjectForm(true);
+  };
+
+  const handleResetProjectForm = () => {
+    setEditingProjectId(null);
+    setProjectTitle('');
+    setProjectTaglineEs('');
+    setProjectTaglineEn('');
+    setProjectSummaryEs('');
+    setProjectSummaryEn('');
+    setProjectRoleEs('Creador & Desarrollador');
+    setProjectRoleEn('Creator & Developer');
+    setProjectPeriod(new Date().getFullYear().toString());
+    setProjectStack('React, TypeScript, Tailwind');
+    setProjectImage('/assets/semanita_app_mockup.png');
+    setProjectDemoUrl('');
+    setProjectRepoUrl('');
+    setShowProjectForm(true);
+  };
+
+  const handleSaveProjectForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectTitle.trim()) return;
 
     setIsSaving(true);
-    const newProj: Project = {
-      id: `proj-${Date.now()}`,
+    const updatedProj: Project = {
+      id: editingProjectId || `proj-${Date.now()}`,
       title: projectTitle,
       tagline: { es: projectTaglineEs || projectTitle, en: projectTaglineEn || projectTitle },
       summary: { es: projectSummaryEs, en: projectSummaryEn },
@@ -143,24 +241,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       stack: projectStack.split(',').map((s) => s.trim()).filter(Boolean),
       platforms: ['Web'],
       image: projectImage,
+      demoUrl: projectDemoUrl || undefined,
+      repoUrl: projectRepoUrl || undefined,
       highlights: [],
     };
 
     let dbSuccess = false;
     if (isSupabaseConfigured) {
-      dbSuccess = await upsertProjectToSupabase(newProj);
+      dbSuccess = await upsertProjectToSupabase(updatedProj);
     }
 
-    const updated = [newProj, ...projects];
-    onUpdateProjects(updated);
+    let updatedList: Project[];
+    if (editingProjectId) {
+      updatedList = projects.map((p) => (p.id === editingProjectId ? updatedProj : p));
+    } else {
+      updatedList = [updatedProj, ...projects];
+    }
+
+    onUpdateProjects(updatedList);
     setShowProjectForm(false);
-    setProjectTitle('');
-    setProjectTaglineEs('');
-    setProjectTaglineEn('');
-    setProjectSummaryEs('');
-    setProjectSummaryEn('');
+    setEditingProjectId(null);
     setIsSaving(false);
-    triggerSuccess(dbSuccess ? 'Proyecto guardado en Supabase' : 'Proyecto guardado localmente');
+    triggerSuccess(dbSuccess ? 'Proyecto guardado en Supabase' : 'Proyecto actualizado localmente');
   };
 
   const handleDeleteProject = async (projId: string) => {
@@ -175,7 +277,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     triggerSuccess('Proyecto eliminado');
   };
 
-  // --- HANDLERS FOR PROFILE ---
+  const handleMoveProject = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= projects.length) return;
+
+    const listCopy = [...projects];
+    const temp = listCopy[index];
+    listCopy[index] = listCopy[targetIndex];
+    listCopy[targetIndex] = temp;
+
+    onUpdateProjects(listCopy);
+
+    // Sync order to Supabase if configured
+    if (isSupabaseConfigured) {
+      listCopy.forEach((p) => upsertProjectToSupabase(p));
+    }
+    triggerSuccess('Orden de proyectos actualizado');
+  };
+
+  // ----------------------------------------------------------------------
+  // PROFILE HANDLER
+  // ----------------------------------------------------------------------
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -226,7 +348,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
                 {isSupabaseConfigured
                   ? (language === 'es' ? 'Sincronizado con Supabase Production' : 'Synced with Supabase Production')
-                  : (language === 'es' ? 'Modo Local Demo' : 'Local Demo Mode')}
+                  : (language === 'es' ? 'Modo Local' : 'Local Mode')}
               </p>
             </div>
           </div>
@@ -298,13 +420,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* SKILLS TAB */}
           {activeTab === 'skills' && (
             <div className="space-y-6">
-              {/* Add Skill Form */}
+              {/* Add / Edit Skill Form */}
               <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl space-y-4">
-                <h3 className="text-sm font-semibold text-cyan-400 flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  {language === 'es' ? 'Agregar Nueva Habilidad' : 'Add New Skill'}
-                </h3>
-                <form onSubmit={handleAddSkill} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-cyan-400 flex items-center gap-2">
+                    {editingSkillOldName ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                    {editingSkillOldName
+                      ? (language === 'es' ? `Editar Skill: "${editingSkillOldName}"` : `Edit Skill: "${editingSkillOldName}"`)
+                      : (language === 'es' ? 'Agregar Nueva Habilidad' : 'Add New Skill')}
+                  </h3>
+                  {editingSkillOldName && (
+                    <button
+                      onClick={handleCancelEditSkill}
+                      className="text-xs text-slate-400 hover:text-white underline"
+                    >
+                      {language === 'es' ? 'Cancelar Edición' : 'Cancel Edit'}
+                    </button>
+                  )}
+                </div>
+
+                <form onSubmit={handleSaveSkillForm} className="space-y-3">
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">Categoría</label>
                     <select
@@ -338,9 +473,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         onChange={(e) => setNewSkillLevel(e.target.value)}
                         className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200"
                       >
-                        <option value="Basic">Basic / Básico</option>
-                        <option value="Intermediate">Intermediate / Intermedio</option>
-                        <option value="Advanced">Advanced / Avanzado</option>
+                        <option value="Básico / Basic">Básico / Basic</option>
+                        <option value="Intermedio / Intermediate">Intermedio / Intermediate</option>
+                        <option value="Avanzado / Advanced">Avanzado / Advanced</option>
                       </select>
                     </div>
                   </div>
@@ -363,13 +498,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     disabled={isSaving}
                     className="w-full py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
                   >
-                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    {language === 'es' ? 'Guardar Habilidad (Supabase)' : 'Save Skill (Supabase)'}
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingSkillOldName ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                    {editingSkillOldName
+                      ? (language === 'es' ? 'Guardar Cambios de Skill' : 'Save Skill Changes')
+                      : (language === 'es' ? 'Añadir Habilidad' : 'Add Skill')}
                   </button>
                 </form>
               </div>
 
-              {/* List skills per category */}
+              {/* List skills per category with edit & reordering controls */}
               <div className="space-y-4">
                 {skillCategories.map((cat) => (
                   <div key={cat.id} className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-3">
@@ -377,24 +514,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       {t(cat.category)} ({cat.skills.length})
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {cat.skills.map((skill) => (
+                      {cat.skills.map((skill, idx) => (
                         <div
                           key={skill.name}
                           className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs flex items-center gap-2 group hover:border-cyan-500/40"
                         >
-                          <span className="text-slate-200">{skill.name}</span>
+                          <span className="text-slate-200 font-medium">{skill.name}</span>
                           {skill.level && (
                             <span className="text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
                               {skill.level}
                             </span>
                           )}
-                          <button
-                            onClick={() => handleDeleteSkill(cat.id, skill.name)}
-                            disabled={isSaving}
-                            className="text-slate-500 hover:text-rose-400 transition-colors ml-1 disabled:opacity-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+
+                          {/* Controls: Reorder Up/Down, Edit, Delete */}
+                          <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-800">
+                            <button
+                              onClick={() => handleMoveSkill(cat.id, idx, 'up')}
+                              disabled={idx === 0}
+                              className="text-slate-500 hover:text-cyan-400 disabled:opacity-20"
+                              title="Mover arriba"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleMoveSkill(cat.id, idx, 'down')}
+                              disabled={idx === cat.skills.length - 1}
+                              className="text-slate-500 hover:text-cyan-400 disabled:opacity-20"
+                              title="Mover abajo"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleStartEditSkill(cat.id, skill)}
+                              className="text-slate-500 hover:text-amber-400 transition-colors"
+                              title="Editar skill"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSkill(cat.id, skill.name)}
+                              disabled={isSaving}
+                              className="text-slate-500 hover:text-rose-400 transition-colors disabled:opacity-50"
+                              title="Eliminar skill"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -412,20 +577,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   Proyectos ({projects.length})
                 </h3>
                 <button
-                  onClick={() => setShowProjectForm(!showProjectForm)}
+                  onClick={handleResetProjectForm}
                   className="px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-400 text-xs rounded-lg font-medium flex items-center gap-1.5 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  {showProjectForm ? (language === 'es' ? 'Cerrar Formulario' : 'Close Form') : (language === 'es' ? 'Nuevo Proyecto' : 'New Project')}
+                  {language === 'es' ? 'Nuevo Proyecto' : 'New Project'}
                 </button>
               </div>
 
-              {/* Add Project Form */}
+              {/* Add / Edit Project Form */}
               {showProjectForm && (
-                <form onSubmit={handleAddProject} className="p-4 bg-slate-900/80 border border-cyan-500/30 rounded-xl space-y-3">
-                  <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
-                    {language === 'es' ? 'Nuevo Proyecto para Supabase' : 'New Project for Supabase'}
-                  </h4>
+                <form onSubmit={handleSaveProjectForm} className="p-4 bg-slate-900/80 border border-cyan-500/30 rounded-xl space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
+                      {editingProjectId
+                        ? (language === 'es' ? 'Editar Proyecto Existente' : 'Edit Existing Project')
+                        : (language === 'es' ? 'Nuevo Proyecto para Supabase' : 'New Project for Supabase')}
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProjectForm(false);
+                        setEditingProjectId(null);
+                      }}
+                      className="text-xs text-slate-400 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
 
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">Título del Proyecto</label>
@@ -509,7 +688,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Tecnologías Stack (separadas por coma)</label>
+                      <label className="block text-xs text-slate-400 mb-1">Tecnologías (separadas por coma)</label>
                       <input
                         type="text"
                         value={projectStack}
@@ -535,19 +714,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     className="w-full py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
                   >
                     {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    {language === 'es' ? 'Guardar Proyecto en Supabase' : 'Save Project to Supabase'}
+                    {editingProjectId
+                      ? (language === 'es' ? 'Guardar Cambios del Proyecto' : 'Save Project Changes')
+                      : (language === 'es' ? 'Guardar Nuevo Proyecto' : 'Save New Project')}
                   </button>
                 </form>
               )}
 
-              {/* Projects list */}
+              {/* Projects list with edit, delete & reorder */}
               <div className="space-y-3">
-                {projects.map((proj) => (
-                  <div key={proj.id} className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
+                {projects.map((proj, idx) => (
+                  <div key={proj.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between group hover:border-cyan-500/40 transition-colors">
                     <div>
-                      <h4 className="text-xs font-bold text-cyan-400">{proj.title}</h4>
-                      <p className="text-[11px] text-slate-400">{t(proj.tagline)}</p>
-                      <div className="flex gap-1.5 mt-1.5">
+                      <h4 className="text-xs font-bold text-cyan-400 flex items-center gap-2">
+                        {proj.title}
+                        <span className="text-[10px] text-slate-500 font-mono">#{idx + 1}</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{t(proj.tagline)}</p>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
                         {proj.stack.map((tech) => (
                           <span key={tech} className="text-[9px] px-1.5 py-0.5 bg-slate-900 border border-slate-800 text-slate-300 rounded font-mono">
                             {tech}
@@ -555,14 +739,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         ))}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDeleteProject(proj.id)}
-                      disabled={isSaving}
-                      className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg transition-colors"
-                      title="Eliminar proyecto"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleMoveProject(idx, 'up')}
+                        disabled={idx === 0}
+                        className="p-1 text-slate-500 hover:text-cyan-400 disabled:opacity-20 transition-colors"
+                        title="Mover arriba"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleMoveProject(idx, 'down')}
+                        disabled={idx === projects.length - 1}
+                        className="p-1 text-slate-500 hover:text-cyan-400 disabled:opacity-20 transition-colors"
+                        title="Mover abajo"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleStartEditProject(proj)}
+                        className="p-1 text-slate-500 hover:text-amber-400 transition-colors"
+                        title="Editar proyecto"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProject(proj.id)}
+                        disabled={isSaving}
+                        className="p-1 text-slate-500 hover:text-rose-400 transition-colors disabled:opacity-50"
+                        title="Eliminar proyecto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

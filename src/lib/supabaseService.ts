@@ -98,6 +98,40 @@ export async function saveSkillToSupabase(
   }
 }
 
+export async function updateSkillInSupabase(
+  oldName: string,
+  categoryId: string,
+  skill: { name: string; level: string; isPrimary?: boolean }
+): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return false;
+
+  try {
+    const levelParts = skill.level.split('/');
+    const level_es = levelParts[0]?.trim() || skill.level;
+    const level_en = levelParts[1]?.trim() || levelParts[0]?.trim() || skill.level;
+
+    const { error } = await supabase
+      .from('skills')
+      .update({
+        category_id: categoryId,
+        name: skill.name,
+        level_es,
+        level_en,
+        is_primary: skill.isPrimary || false,
+      })
+      .eq('name', oldName);
+
+    if (error) {
+      console.error('Error updating skill in Supabase:', error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('Failed to update skill in Supabase:', e);
+    return false;
+  }
+}
+
 export async function deleteSkillFromSupabase(skillName: string): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
@@ -168,8 +202,7 @@ export async function upsertProjectToSupabase(project: Project): Promise<boolean
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
-    const payload = {
-      id: project.id.includes('-') ? project.id : undefined, // pass UUID if present
+    const payload: any = {
       title: project.title,
       tagline_es: project.tagline.es,
       tagline_en: project.tagline.en,
@@ -184,6 +217,10 @@ export async function upsertProjectToSupabase(project: Project): Promise<boolean
       demo_url: project.demoUrl,
       repo_url: project.repoUrl,
     };
+
+    if (project.id && project.id.includes('-')) {
+      payload.id = project.id;
+    }
 
     const { error } = await supabase.from('projects').upsert(payload);
     if (error) {
@@ -239,7 +276,6 @@ export async function saveProfileToSupabase(profile: Partial<DbProfile>): Promis
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
-    // Check if profile exists
     const existing = await fetchProfileFromSupabase();
     if (existing?.id) {
       const { error } = await supabase
