@@ -9,4 +9,17 @@ export default defineConfig({
       strict: false,
     },
   },
+  build: {
+    target: 'es2022',
+    cssCodeSplit: true,
+    minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          lucide: ['lucide-react'],
+        },
+      },
+    },
+  },
 });

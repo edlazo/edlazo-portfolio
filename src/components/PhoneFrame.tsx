@@ -35,6 +35,8 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
             <img
               src={imageSrc}
               alt={altText}
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover object-top"
             />
 

@@ -7,7 +7,7 @@ export const PROFILE_DATA = {
     es: 'Backend & AI Engineer',
     en: 'Backend & AI Engineer',
   },
-  avatar: '/assets/elias_profile_photo.png',
+  avatar: '/assets/elias_profile_photo.webp',
   location: {
     es: 'Buenos Aires, Argentina',
     en: 'Buenos Aires, Argentina',
@@ -199,7 +199,7 @@ export const FEATURED_PROJECTS: Project[] = [
     period: '2026',
     stack: ['React Native (Expo)', 'TypeScript', 'Express', 'Supabase', 'Google Gemini API'],
     platforms: ['iOS', 'Android', 'Web'],
-    image: '/assets/semanita_app_mockup.png',
+    image: '/assets/semanita_app_mockup.webp',
     summary: {
       es: 'Aplicación móvil de planificación de comidas nacida de una necesidad personal. Utiliza IA de visión para analizar los ingredientes en tu heladera y generar un menú semanal organizado sin desperdiciar comida.',
       en: 'Mobile meal planning application born out of a personal need. Uses vision AI to analyze ingredients in your fridge and generate an organized weekly menu without food waste.',
@@ -289,7 +289,7 @@ export const FEATURED_PROJECTS: Project[] = [
     period: '2026',
     stack: ['Python', 'FastAPI', 'Pydantic v2', 'PostgreSQL', 'GitLab CI/CD', 'Docker'],
     platforms: ['Plataforma Web', 'API Backend', 'Docker'],
-    image: '/assets/kairos_api_architecture.png',
+    image: '/assets/kairos_api_architecture.webp',
     summary: {
       es: 'Plataforma de inversión colaborativa nacida para ayudar a un cliente inversor a conectar personas sin experiencia financiera con campañas de financiación transparentes.',
       en: 'Collaborative investment platform created for an investor client to connect people with transparent crowdfunding campaigns.',
