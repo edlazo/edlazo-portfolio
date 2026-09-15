@@ -17,6 +17,7 @@ import {
   HERO_DATA,
 } from './data/portfolioData';
 import type { Project, SkillCategory } from './types/portfolio';
+import { supabase } from './lib/supabase';
 import {
   fetchSkillsFromSupabase,
   fetchProjectsFromSupabase,
@@ -83,7 +84,10 @@ export function AppContent() {
     setIsAdminPanelOpen(true);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     localStorage.removeItem('elias_is_admin');
     setIsAdmin(false);
     setIsAdminPanelOpen(false);

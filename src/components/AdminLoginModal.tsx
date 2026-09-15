@@ -24,34 +24,42 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setLoading(true);
 
     try {
-      if (isSupabaseConfigured && supabase && email.trim()) {
-        const { error: authError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (authError) {
-          // If auth fails but local demo pass matches, allow fallback
-          if (password === 'elias123' || password === 'admin') {
-            console.warn('Supabase Auth failed, falling back to local admin mode:', authError.message);
-          } else {
-            throw authError;
-          }
-        }
-      } else {
-        if (password !== 'elias123' && password !== 'admin') {
-          throw new Error(
-            language === 'es'
-              ? 'Contraseña incorrecta (clave demo: elias123)'
-              : 'Incorrect password (demo key: elias123)'
-          );
-        }
+      if (!isSupabaseConfigured || !supabase) {
+        throw new Error(
+          language === 'es'
+            ? 'Supabase no está configurado. Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel.'
+            : 'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel.'
+        );
       }
 
-      localStorage.setItem('elias_is_admin', 'true');
-      onLoginSuccess();
-      onClose();
+      if (!email.trim()) {
+        throw new Error(
+          language === 'es'
+            ? 'Ingresa tu correo registrado en Supabase Auth.'
+            : 'Enter your registered Supabase Auth email.'
+        );
+      }
+
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (authError) {
+        throw new Error(
+          language === 'es'
+            ? `Credenciales de Supabase incorrectas: ${authError.message}`
+            : `Invalid Supabase credentials: ${authError.message}`
+        );
+      }
+
+      if (data?.session) {
+        localStorage.setItem('elias_is_admin', 'true');
+        onLoginSuccess();
+        onClose();
+      }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Error al iniciar sesión';
+      const message = err instanceof Error ? err.message : 'Error de autenticación';
       setError(message);
     } finally {
       setLoading(false);
@@ -76,7 +84,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
                 {language === 'es' ? 'Acceso de Administrador' : 'Admin Access'}
               </h2>
               <p className="text-xs text-slate-400">
-                {language === 'es' ? '¿Sos Elias? Iniciá sesión para gestionar el contenido' : 'Are you Elias? Log in to manage content'}
+                {language === 'es' ? 'Autenticación estricta vía Supabase Auth' : 'Strict authentication via Supabase Auth'}
               </p>
             </div>
           </div>
@@ -91,35 +99,33 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
 
         {/* Supabase status badge */}
         <div className="mb-6 p-3 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center gap-2.5 text-xs">
-          <div className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+          <div className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
           <span className="text-slate-300">
             {isSupabaseConfigured
-              ? (language === 'es' ? 'Conectado a Supabase Production' : 'Connected to Supabase Production')
-              : (language === 'es' ? 'Modo Local Demo (Sin Supabase .env)' : 'Local Demo Mode (No Supabase .env)')}
+              ? (language === 'es' ? 'Conectado a Supabase Auth' : 'Connected to Supabase Auth')
+              : (language === 'es' ? 'Supabase No Configurado' : 'Supabase Not Configured')}
           </span>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {isSupabaseConfigured && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="contacto@eliaslazo.dev"
-                className="w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
-              />
-            </div>
-          )}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              Email Supabase Auth
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="contacto@eliaslazo.dev"
+              className="w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+            />
+          </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
-              {language === 'es' ? 'Contraseña' : 'Password'}
+              {language === 'es' ? 'Contraseña Supabase' : 'Supabase Password'}
             </label>
             <div className="relative">
               <input
@@ -132,11 +138,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
               />
               <Key className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             </div>
-            {!isSupabaseConfigured && (
-              <p className="mt-1 text-[11px] text-slate-400">
-                {language === 'es' ? 'Clave demo local: elias123' : 'Local demo password: elias123'}
-              </p>
-            )}
           </div>
 
           {error && (
