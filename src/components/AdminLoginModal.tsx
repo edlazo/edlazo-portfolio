@@ -24,21 +24,25 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setLoading(true);
 
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (isSupabaseConfigured && supabase && email.trim()) {
         const { error: authError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        if (authError) throw authError;
+        if (authError) {
+          // If auth fails but local demo pass matches, allow fallback
+          if (password === 'elias123' || password === 'admin') {
+            console.warn('Supabase Auth failed, falling back to local admin mode:', authError.message);
+          } else {
+            throw authError;
+          }
+        }
       } else {
-        // Fallback local admin check if Supabase is not configured yet
-        if (password === 'elias123' || password === 'admin') {
-          // Success local login
-        } else {
+        if (password !== 'elias123' && password !== 'admin') {
           throw new Error(
             language === 'es'
-              ? 'Contraseña incorrecta (demo pass: elias123)'
-              : 'Incorrect password (demo pass: elias123)'
+              ? 'Contraseña incorrecta (clave demo: elias123)'
+              : 'Incorrect password (demo key: elias123)'
           );
         }
       }
@@ -107,7 +111,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="elias@ejemplo.com"
+                placeholder="contacto@eliaslazo.dev"
                 className="w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
               />
             </div>

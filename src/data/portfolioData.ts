@@ -44,7 +44,7 @@ export const HERO_DATA = {
     github: 'https://github.com/edlazo',
     gitlab: 'https://gitlab.com/edlazo',
     linkedin: 'https://www.linkedin.com/in/elias-demian-lazo/',
-    email: 'elias.demian.lazo@gmail.com',
+    email: 'contacto@eliaslazo.dev',
   },
 };
 

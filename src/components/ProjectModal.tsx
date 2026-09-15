@@ -109,34 +109,36 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
           </div>
 
           {/* Architecture Overview */}
-          <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
-            <h4 className="text-base font-bold text-white font-heading flex items-center gap-2">
-              <Server className="w-5 h-5 text-amber-400" />
-              <span>{t({ es: 'Diseño del Sistema y Visión General', en: 'System Design & Architecture Overview' })}</span>
-            </h4>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              {t(project.architectureOverview.description)}
-            </p>
+          {project.architectureOverview && (
+            <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
+              <h4 className="text-base font-bold text-white font-heading flex items-center gap-2">
+                <Server className="w-5 h-5 text-amber-400" />
+                <span>{t({ es: 'Diseño del Sistema y Visión General', en: 'System Design & Architecture Overview' })}</span>
+              </h4>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                {t(project.architectureOverview.description)}
+              </p>
 
-            {project.architectureOverview.flowSteps && (
-              <div className="pt-4 border-t border-slate-800/80">
-                <h5 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{t({ es: 'Flujo de Peticiones y Datos', en: 'Request Lifecycle & Data Flow' })}</span>
-                </h5>
-                <ol className="space-y-2.5">
-                  {project.architectureOverview.flowSteps.map((step, idx) => (
-                    <li key={idx} className="flex items-start gap-3 text-xs text-slate-300">
-                      <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-mono text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                        {idx + 1}
-                      </span>
-                      <span className="leading-relaxed">{t(step)}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
-          </div>
+              {project.architectureOverview.flowSteps && (
+                <div className="pt-4 border-t border-slate-800/80">
+                  <h5 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{t({ es: 'Flujo de Peticiones y Datos', en: 'Request Lifecycle & Data Flow' })}</span>
+                  </h5>
+                  <ol className="space-y-2.5">
+                    {project.architectureOverview.flowSteps.map((step, idx) => (
+                      <li key={idx} className="flex items-start gap-3 text-xs text-slate-300">
+                        <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-mono text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <span className="leading-relaxed">{t(step)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Detailed Technical Highlights */}
           <div>

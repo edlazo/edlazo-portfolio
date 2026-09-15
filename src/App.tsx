@@ -11,8 +11,17 @@ import { AdminLoginModal } from './components/AdminLoginModal';
 import { AdminPanel } from './components/AdminPanel';
 import { Footer } from './components/Footer';
 import { LanguageProvider } from './context/LanguageContext';
-import { SKILL_CATEGORIES as initialCategories, FEATURED_PROJECTS as initialProjects } from './data/portfolioData';
+import {
+  SKILL_CATEGORIES as initialCategories,
+  FEATURED_PROJECTS as initialProjects,
+  HERO_DATA,
+} from './data/portfolioData';
 import type { Project, SkillCategory } from './types/portfolio';
+import {
+  fetchSkillsFromSupabase,
+  fetchProjectsFromSupabase,
+  fetchProfileFromSupabase,
+} from './lib/supabaseService';
 
 export function AppContent() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -21,7 +30,7 @@ export function AppContent() {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Dynamic portfolio state (persisted locally / ready for Supabase sync)
+  // Dynamic portfolio state (persisted locally / synced with Supabase)
   const [skillCategories, setSkillCategories] = useState<SkillCategory[]>(() => {
     const saved = localStorage.getItem('elias_skills');
     return saved ? JSON.parse(saved) : initialCategories;
@@ -32,9 +41,33 @@ export function AppContent() {
     return saved ? JSON.parse(saved) : initialProjects;
   });
 
+  // Fetch live Supabase data on mount
   useEffect(() => {
     const adminState = localStorage.getItem('elias_is_admin') === 'true';
     setIsAdmin(adminState);
+
+    async function loadSupabaseData() {
+      const [remoteSkills, remoteProjects, remoteProfile] = await Promise.all([
+        fetchSkillsFromSupabase(),
+        fetchProjectsFromSupabase(),
+        fetchProfileFromSupabase(),
+      ]);
+
+      if (remoteSkills && remoteSkills.length > 0) {
+        setSkillCategories(remoteSkills);
+      }
+      if (remoteProjects && remoteProjects.length > 0) {
+        setProjects(remoteProjects);
+      }
+      if (remoteProfile) {
+        if (remoteProfile.email) HERO_DATA.socials.email = remoteProfile.email;
+        if (remoteProfile.github_url) HERO_DATA.socials.github = remoteProfile.github_url;
+        if (remoteProfile.gitlab_url) HERO_DATA.socials.gitlab = remoteProfile.gitlab_url;
+        if (remoteProfile.linkedin_url) HERO_DATA.socials.linkedin = remoteProfile.linkedin_url;
+      }
+    }
+
+    loadSupabaseData();
   }, []);
 
   const handleAdminTrigger = () => {

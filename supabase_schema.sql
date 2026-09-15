@@ -100,7 +100,7 @@ INSERT INTO public.profile (
     'Elias',
     'Fullstack & Backend Engineer',
     'Fullstack & Backend Engineer',
-    'elias@devportfolio.com',
+    'contacto@eliaslazo.dev',
     'https://github.com',
     'https://gitlab.com',
     'https://linkedin.com',

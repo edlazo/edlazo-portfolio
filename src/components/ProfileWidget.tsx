@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PROFILE_DATA } from '../data/portfolioData';
+import { PROFILE_DATA, HERO_DATA } from '../data/portfolioData';
 import { useLanguage } from '../context/LanguageContext';
 import { MapPin, GraduationCap, Mail, ChevronDown, UserCheck, ShieldCheck } from 'lucide-react';
 import { GithubIcon, LinkedinIcon } from './Icons';
@@ -135,7 +135,7 @@ export const ProfileWidget: React.FC<ProfileWidgetProps> = ({ onOpenAdminLogin, 
                 <LinkedinIcon className="w-4 h-4" />
               </a>
               <a
-                href="mailto:contact@devportfolio.com"
+                href={`mailto:${HERO_DATA.socials.email}`}
                 className="p-2 rounded-lg bg-slate-950 border border-slate-800 hover:text-amber-400 transition-colors"
                 aria-label="Email"
               >

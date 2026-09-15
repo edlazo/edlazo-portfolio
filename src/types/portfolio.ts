@@ -30,7 +30,7 @@ export interface Project {
   image: string;
   summary: { es: string; en: string };
   highlights: ProjectHighlight[];
-  architectureOverview: {
+  architectureOverview?: {
     description: { es: string; en: string };
     flowSteps?: { es: string; en: string }[];
     securityDetails?: { es: string; en: string };
