@@ -89,7 +89,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h2 id="admin-login-title" className="text-xl font-bold font-jakarta text-slate-100 flex items-center gap-2">
+              <h2 id="admin-login-title" className="text-xl font-bold text-slate-100 flex items-center gap-2">
                 {language === 'es' ? 'Acceso de Administrador' : 'Admin Access'}
               </h2>
               <p className="text-xs text-slate-400">

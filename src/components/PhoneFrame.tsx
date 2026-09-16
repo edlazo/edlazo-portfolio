@@ -18,7 +18,7 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
         
         {/* Hardware Side Buttons */}
         <div className="absolute -left-[7px] top-24 w-[3px] h-10 bg-slate-700 rounded-l-md" /> {/* Volume Up */}
-        <div className="absolute -left-[7px] top-38 w-[3px] h-10 bg-slate-700 rounded-l-md" /> {/* Volume Down */}
+        <div className="absolute -left-[7px] top-[9.5rem] w-[3px] h-10 bg-slate-700 rounded-l-md" /> {/* Volume Down */}
         <div className="absolute -right-[7px] top-28 w-[3px] h-14 bg-slate-700 rounded-r-md" /> {/* Power Button */}
 
         {/* Screen Bezel & Inner Container */}

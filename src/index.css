@@ -77,24 +77,32 @@ summary:focus-visible,
   transform: translateY(0);
 }
 
-/* Scroll entrance animation (see components/Reveal.tsx). Ends on
-   transform: none so revealed content doesn't keep a stacking context. */
+/* Scroll reveal (see components/Reveal.tsx). Content fades in when it enters
+   the viewport band and out when it leaves, sliding in the scroll direction.
+   The stagger delay only applies on the way in. */
 .reveal {
   opacity: 0;
-  transform: translate3d(0, 1.5rem, 0);
   transition:
-    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal[data-reveal='below'] {
+  transform: translate3d(0, 1.5rem, 0);
+}
+
+.reveal[data-reveal='above'] {
+  transform: translate3d(0, -1.5rem, 0);
+}
+
+.reveal[data-reveal='visible'] {
+  opacity: 1;
+  transform: none;
   transition-delay: var(--reveal-delay, 0ms);
 }
 
-.reveal.is-visible {
-  opacity: 1;
-  transform: none;
-}
-
 @media print {
-  .reveal {
+  .reveal[data-reveal] {
     opacity: 1;
     transform: none;
   }
@@ -121,7 +129,7 @@ summary:focus-visible,
     opacity: 0.2;
   }
 
-  .reveal {
+  .reveal[data-reveal] {
     opacity: 1;
     transform: none;
     transition: none !important;

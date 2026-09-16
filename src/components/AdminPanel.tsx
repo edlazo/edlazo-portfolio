@@ -390,7 +390,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold font-jakarta text-slate-100">
+              <h2 className="text-lg font-bold text-slate-100">
                 {language === 'es' ? 'Panel de Administración' : 'Admin Management Panel'}
               </h2>
               <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
@@ -466,7 +466,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* Tab Content */}
         <div
-          className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+          className="flex-1 overflow-y-auto p-6 space-y-6"
           tabIndex={0}
           role="region"
           aria-label={language === 'es' ? 'Contenido del panel' : 'Panel content'}
