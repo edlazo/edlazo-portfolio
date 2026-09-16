@@ -54,7 +54,7 @@ async function resolveCategoryId(categoryId: string): Promise<string | null> {
 // DELETE (for example, an expired admin session): the request succeeds and
 // simply affects zero rows. Every write therefore asks for the affected rows
 // back and treats an empty result as a failure.
-function affectedRows(label: string, data: unknown[] | null): boolean {
+export function affectedRows(label: string, data: unknown[] | null): boolean {
   if (data && data.length > 0) return true;
   console.error(
     `${label}: 0 rows affected. The admin session may have expired (RLS) or no row matched.`

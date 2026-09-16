@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { X, Plus, Trash2, LogOut, Check, AlertCircle, Sparkles, FolderGit2, Cpu, User, Loader2, Save, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Plus, Trash2, LogOut, Check, AlertCircle, Sparkles, FolderGit2, Cpu, User, Loader2, Save, Pencil, ChevronUp, ChevronDown, Inbox } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import type { SkillCategory, Project } from '../types/portfolio';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -10,6 +10,7 @@ import {
 } from '../lib/supabaseService';
 import { ABOUT_DATA, HERO_DATA, PROFILE_DATA } from '../data/portfolioData';
 import { SkillsEditor } from './SkillsEditor';
+import { MessagesInbox } from './MessagesInbox';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -34,7 +35,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onReloadFromDb,
 }) => {
   const { language, t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'skills' | 'projects' | 'profile'>('skills');
+  const [activeTab, setActiveTab] = useState<'skills' | 'projects' | 'profile' | 'messages'>('skills');
 
   // Loading & notification state
   const [isSaving, setIsSaving] = useState(false);
@@ -43,6 +44,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Unsaved changes in the skills editor (it keeps its own draft).
   const [skillsDirty, setSkillsDirty] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   // Project state
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
@@ -315,17 +317,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b border-slate-800 bg-slate-950/60 px-4 sm:px-6 pt-3 gap-1 sm:gap-2 overflow-x-auto">
+        <div className="flex border-b border-slate-800 bg-slate-950/60 px-2 sm:px-6 pt-3 gap-1 sm:gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('skills')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'skills'
                 ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <Cpu className="w-4 h-4" />
-            {language === 'es' ? 'Habilidades (Skills)' : 'Skills'}
+            <span className="sm:hidden">Skills</span>
+            <span className="hidden sm:inline">{language === 'es' ? 'Habilidades (Skills)' : 'Skills'}</span>
             {skillsDirty && (
               <span
                 className="w-2 h-2 rounded-full bg-amber-400"
@@ -336,7 +339,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('projects')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'projects'
                 ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -347,14 +350,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'profile'
                 ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <User className="w-4 h-4" />
-            {language === 'es' ? 'Perfil & Contacto' : 'Profile & Contact'}
+            <span className="sm:hidden">{language === 'es' ? 'Perfil' : 'Profile'}</span>
+            <span className="hidden sm:inline">{language === 'es' ? 'Perfil & Contacto' : 'Profile & Contact'}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('messages')}
+            className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
+              activeTab === 'messages'
+                ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Inbox className="w-4 h-4" />
+            {language === 'es' ? 'Mensajes' : 'Messages'}
+            {unreadMessages > 0 && (
+              <span
+                className="min-w-[1.25rem] px-1 py-0.5 rounded-full bg-cyan-500 text-slate-950 text-[10px] font-bold leading-none text-center"
+                aria-label={language === 'es' ? `${unreadMessages} sin leer` : `${unreadMessages} unread`}
+              >
+                {unreadMessages}
+              </span>
+            )}
           </button>
         </div>
 
@@ -395,6 +418,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               onDirtyChange={setSkillsDirty}
               showStatus={showStatus}
             />
+          </div>
+
+          <div hidden={activeTab !== 'messages'}>
+            <MessagesInbox onUnreadChange={setUnreadMessages} showStatus={showStatus} />
           </div>
 
           {/* PROJECTS TAB */}

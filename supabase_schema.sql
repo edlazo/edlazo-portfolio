@@ -202,7 +202,44 @@ REVOKE ALL ON FUNCTION public.save_skills(jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.save_skills(jsonb) TO authenticated;
 
 -- --------------------------------------------------------
--- 6. REFRESCAR EL CACHE DE ESQUEMA DE POSTGREST
+-- 6. MENSAJES DEL FORMULARIO DE CONTACTO
+--    Los inserta SOLO la funcion de Vercel /api/contact con la service_role key
+--    (que ignora RLS). No hay politica de INSERT para anon a proposito: si la
+--    tabla aceptara inserciones publicas, cualquiera podria saltearse el
+--    anti-spam de la funcion y escribir directo por la API REST.
+--    El admin (sesion autenticada) puede leerlos, marcarlos y borrarlos.
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.contact_messages (
+    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name         TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 100),
+    email        TEXT NOT NULL CHECK (char_length(email) <= 254 AND email ~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
+    project_type TEXT CHECK (char_length(project_type) <= 100),
+    message      TEXT NOT NULL CHECK (char_length(message) BETWEEN 10 AND 5000),
+    language     TEXT CHECK (language IN ('es', 'en')),
+    ip_hash      TEXT,                                -- sha256(IP + sal): limita envios por IP sin guardar la IP
+    email_sent   BOOLEAN NOT NULL DEFAULT FALSE,      -- FALSE = guardado pero el aviso por email fallo
+    is_read      BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS contact_messages_created_at_idx ON public.contact_messages (created_at DESC);
+CREATE INDEX IF NOT EXISTS contact_messages_ip_hash_idx    ON public.contact_messages (ip_hash, created_at DESC);
+
+ALTER TABLE public.contact_messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admin read contact messages"   ON public.contact_messages;
+DROP POLICY IF EXISTS "Admin update contact messages" ON public.contact_messages;
+DROP POLICY IF EXISTS "Admin delete contact messages" ON public.contact_messages;
+
+CREATE POLICY "Admin read contact messages"   ON public.contact_messages FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Admin update contact messages" ON public.contact_messages FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Admin delete contact messages" ON public.contact_messages FOR DELETE TO authenticated USING (true);
+
+REVOKE ALL ON public.contact_messages FROM anon;
+GRANT SELECT, UPDATE, DELETE ON public.contact_messages TO authenticated;
+
+-- --------------------------------------------------------
+-- 7. REFRESCAR EL CACHE DE ESQUEMA DE POSTGREST
 --    Sin esto, /rest/v1/<tabla> puede seguir devolviendo 404 (PGRST205) unos segundos.
 -- --------------------------------------------------------
 NOTIFY pgrst, 'reload schema';

@@ -143,6 +143,54 @@ Si después de guardar desde el panel aparece "No se guardó nada en Supabase" y
 figura `PGRST202 Could not find the function public.save_skills`, la función todavía no existe
 o el cache de PostgREST no se refrescó: ejecutá `NOTIFY pgrst, 'reload schema';`.
 
+## 3c. Formulario de contacto (Supabase + email con Resend)
+
+El formulario envía a la función de Vercel `api/contact.ts`, que filtra spam (campo trampa,
+tiempo mínimo de llenado y máximo 3 mensajes cada 10 minutos por IP / 30 por hora en total),
+guarda el mensaje en `contact_messages` y lo reenvía por email vía Resend. Si una de las dos
+cosas falla, la otra alcanza: el mensaje nunca se pierde. Los mensajes se leen en la pestaña
+**Mensajes** del panel admin.
+
+### Paso 1 — Crear la tabla
+SQL Editor → pegá `supabase_schema.sql` completo → **Run** (sección 6). Es seguro re-ejecutarlo.
+
+### Paso 2 — Resend
+1. Creá una cuenta en <https://resend.com> (plan gratis: 3.000 emails/mes).
+2. **Domains → Add domain** → `eliaslazo.dev`.
+3. Resend muestra registros DNS (un MX y un TXT en `send.eliaslazo.dev`, y un TXT en
+   `resend._domainkey.eliaslazo.dev`). Cargalos en **Cloudflare → DNS → Records** exactamente
+   como aparecen. No tocan el MX raíz de Cloudflare Email Routing, así que la recepción de
+   `contacto@eliaslazo.dev` sigue funcionando igual.
+4. Esperá a que el dominio figure como **Verified**.
+5. **API Keys → Create API key** con permiso *Sending access*.
+
+### Paso 3 — Variables de entorno en Vercel
+Project → Settings → Environment Variables (entorno **Production**, y Preview si querés probar ahí):
+
+| Variable | Valor |
+|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → pestaña *Legacy API keys* → `service_role` (**secreta**) |
+| `RESEND_API_KEY` | la key del paso 2 (**secreta**) |
+| `IP_HASH_SALT` | cualquier texto largo y aleatorio (opcional) |
+| `CONTACT_TO_EMAIL` | opcional, por defecto `contacto@eliaslazo.dev` |
+| `CONTACT_FROM_EMAIL` | opcional, por defecto `Portfolio <formulario@eliaslazo.dev>` |
+
+`SUPABASE_URL` no hace falta: la función usa `VITE_SUPABASE_URL`, que ya está cargada.
+La `service_role` ignora RLS: **nunca** la pongas en una variable `VITE_*` ni en el código del
+frontend, porque quedaría expuesta en el navegador.
+
+Después de cargar las variables hay que **redeployar** (Deployments → ⋯ → Redeploy) para que la
+función las vea.
+
+### Paso 4 — Probar
+Enviá un mensaje desde <https://www.eliaslazo.dev>: tiene que llegar el email a tu casilla y
+aparecer en la pestaña Mensajes. Si en la pestaña figura "email no enviado", el mensaje se guardó
+pero Resend falló: revisá **Vercel → Logs** (buscá `contact: resend failed`), normalmente es el
+dominio sin verificar o la API key.
+
+Nota: `npm run dev` (Vite) no ejecuta las funciones de `api/`; para probar el formulario en local
+usá `vercel dev`.
+
 ## 4. Estructura final del schema
 
 | Tabla | Columnas clave | RLS |

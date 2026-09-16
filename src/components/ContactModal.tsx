@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Mail, Copy, Check, Send } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Mail, Copy, Check, Send, Loader2, AlertCircle } from 'lucide-react';
 import { HERO_DATA } from '../data/portfolioData';
 import { useLanguage } from '../context/LanguageContext';
 import { useDialog } from '../hooks/useDialog';
@@ -9,18 +9,40 @@ interface ContactModalProps {
   onClose: () => void;
 }
 
+type SendStatus = 'idle' | 'sending' | 'success' | 'error';
+type SendError = 'invalid' | 'rate_limited' | 'failed';
+
+const EMPTY_FORM = { name: '', email: '', role: 'Backend / API Architecture', message: '' };
+
 export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [copied, setCopied] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    role: 'Backend / API Architecture',
-    message: '',
-  });
+  const [status, setStatus] = useState<SendStatus>('idle');
+  const [error, setError] = useState<{ kind: SendError; fields: string[] } | null>(null);
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  // Honeypot: invisible to people, bots tend to fill every field.
+  const [website, setWebsite] = useState('');
+  const openedAt = useRef(0);
+  const statusRef = useRef(status);
+  statusRef.current = status;
 
   const dialogRef = useDialog(isOpen, onClose);
+
+  // Runs only when the modal opens or closes. The fill timer must not restart
+  // on a failed send, or a quick retry would be taken for a bot and dropped.
+  useEffect(() => {
+    if (isOpen) {
+      openedAt.current = Date.now();
+      return;
+    }
+    // A sent message is cleared when the modal closes; an unsent draft is kept.
+    if (statusRef.current === 'success') {
+      setFormData(EMPTY_FORM);
+      setWebsite('');
+    }
+    if (statusRef.current !== 'sending') setStatus('idle');
+    setError(null);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -30,14 +52,46 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      onClose();
-      setFormData({ name: '', email: '', role: 'Backend / API Architecture', message: '' });
-    }, 2500);
+    if (status === 'sending') return;
+    setStatus('sending');
+    setError(null);
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          projectType: formData.role,
+          message: formData.message,
+          language,
+          website,
+          elapsedMs: Date.now() - openedAt.current,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok && result.ok) {
+        setStatus('success');
+        return;
+      }
+      setStatus('error');
+      if (response.status === 400) setError({ kind: 'invalid', fields: result.fields ?? [] });
+      else if (response.status === 429) setError({ kind: 'rate_limited', fields: [] });
+      else setError({ kind: 'failed', fields: [] });
+    } catch {
+      setStatus('error');
+      setError({ kind: 'failed', fields: [] });
+    }
+  };
+
+  const fieldNames: Record<string, { es: string; en: string }> = {
+    name: { es: 'nombre', en: 'name' },
+    email: { es: 'correo electrónico', en: 'email address' },
+    message: { es: 'mensaje (entre 10 y 5000 caracteres)', en: 'message (10 to 5000 characters)' },
   };
 
   return (
@@ -110,7 +164,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
         </div>
 
         {/* Message Form */}
-        {submitted ? (
+        {status === 'success' ? (
           <div className="py-12 text-center space-y-3 animate-fade-in" role="status" aria-live="polite">
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
               <Check className="w-6 h-6" />
@@ -121,9 +175,16 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
             <p className="text-xs text-slate-400">
               {t({ es: 'Gracias por escribirme. Me pondré en contacto muy pronto.', en: 'Thank you for reaching out. I will respond shortly.' })}
             </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors"
+            >
+              {t({ es: 'Cerrar', en: 'Close' })}
+            </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 relative">
             <div>
               <label htmlFor="contact-name" className="block text-xs font-mono text-slate-300 mb-1">
                 {t({ es: 'TU NOMBRE', en: 'YOUR NAME' })}
@@ -132,6 +193,8 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
                 id="contact-name"
                 type="text"
                 required
+                maxLength={100}
+                autoComplete="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Alex Morgan"
@@ -147,6 +210,8 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
                 id="contact-email"
                 type="email"
                 required
+                maxLength={254}
+                autoComplete="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="alex@company.com"
@@ -178,6 +243,8 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
               <textarea
                 id="contact-message"
                 required
+                minLength={10}
+                maxLength={5000}
                 rows={3}
                 value={formData.message}
                 onChange={(e) => setFormData({ ...formData, message: e.target.value })}
@@ -186,12 +253,65 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
               />
             </div>
 
+            {/* Honeypot, hidden from people and assistive technology */}
+            <div className="absolute w-px h-px -m-px overflow-hidden [clip:rect(0,0,0,0)]" aria-hidden="true">
+              <label htmlFor="contact-website">Website</label>
+              <input
+                id="contact-website"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
+            </div>
+
+            {error && (
+              <div role="alert" className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <p>
+                  {error.kind === 'invalid' &&
+                    `${t({ es: 'Revisá estos campos: ', en: 'Please check: ' })}${
+                      error.fields.map((f) => (fieldNames[f] ? t(fieldNames[f]) : f)).join(', ') ||
+                      t({ es: 'los datos del formulario', en: 'the form fields' })
+                    }.`}
+                  {error.kind === 'rate_limited' &&
+                    t({
+                      es: 'Recibí varios mensajes seguidos desde tu conexión. Probá de nuevo en unos minutos o escribime a ',
+                      en: 'Several messages arrived in a row from your connection. Try again in a few minutes or email me at ',
+                    })}
+                  {error.kind === 'failed' &&
+                    t({
+                      es: 'No se pudo enviar el mensaje. Probá de nuevo o escribime directamente a ',
+                      en: "The message couldn't be sent. Try again or email me directly at ",
+                    })}
+                  {error.kind !== 'invalid' && (
+                    <>
+                      <a href={`mailto:${HERO_DATA.socials.email}`} className="underline text-rose-100">
+                        {HERO_DATA.socials.email}
+                      </a>
+                      .
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition-all shadow-lg hover:shadow-amber-500/25 flex items-center justify-center gap-2 active:scale-[0.98]"
+              disabled={status === 'sending'}
+              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition-all shadow-lg hover:shadow-amber-500/25 flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
             >
-              <Send className="w-4 h-4" />
-              <span>{t({ es: 'Enviar Mensaje', en: 'Send Message' })}</span>
+              {status === 'sending' ? (
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Send className="w-4 h-4" aria-hidden="true" />
+              )}
+              <span>
+                {status === 'sending'
+                  ? t({ es: 'Enviando…', en: 'Sending…' })
+                  : t({ es: 'Enviar Mensaje', en: 'Send Message' })}
+              </span>
             </button>
           </form>
         )}
