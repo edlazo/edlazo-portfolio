@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { About } from './components/About';
@@ -43,34 +43,45 @@ export function AppContent() {
     return saved ? JSON.parse(saved) : initialProjects;
   });
 
-  // Fetch live Supabase data on mount
+  const handleUpdateSkills = useCallback((updatedCategories: SkillCategory[]) => {
+    setSkillCategories(updatedCategories);
+    localStorage.setItem('elias_skills', JSON.stringify(updatedCategories));
+  }, []);
+
+  const handleUpdateProjects = useCallback((updatedProjects: Project[]) => {
+    setProjects(updatedProjects);
+    localStorage.setItem('elias_projects', JSON.stringify(updatedProjects));
+  }, []);
+
+  // Pulls the live Supabase data and makes it the local truth. Runs on mount and
+  // again after every successful write from the AdminPanel, so the panel shows
+  // what the database actually stored instead of its own optimistic state.
+  const refreshFromSupabase = useCallback(async () => {
+    const [remoteSkills, remoteProjects, remoteProfile] = await Promise.all([
+      fetchSkillsFromSupabase(),
+      fetchProjectsFromSupabase(),
+      fetchProfileFromSupabase(),
+    ]);
+
+    if (remoteSkills && remoteSkills.length > 0) {
+      handleUpdateSkills(remoteSkills);
+    }
+    if (remoteProjects && remoteProjects.length > 0) {
+      handleUpdateProjects(remoteProjects);
+    }
+    if (remoteProfile) {
+      if (remoteProfile.email) HERO_DATA.socials.email = remoteProfile.email;
+      if (remoteProfile.github_url) HERO_DATA.socials.github = remoteProfile.github_url;
+      if (remoteProfile.gitlab_url) HERO_DATA.socials.gitlab = remoteProfile.gitlab_url;
+      if (remoteProfile.linkedin_url) HERO_DATA.socials.linkedin = remoteProfile.linkedin_url;
+    }
+  }, [handleUpdateSkills, handleUpdateProjects]);
+
   useEffect(() => {
     const adminState = localStorage.getItem('elias_is_admin') === 'true';
     setIsAdmin(adminState);
-
-    async function loadSupabaseData() {
-      const [remoteSkills, remoteProjects, remoteProfile] = await Promise.all([
-        fetchSkillsFromSupabase(),
-        fetchProjectsFromSupabase(),
-        fetchProfileFromSupabase(),
-      ]);
-
-      if (remoteSkills && remoteSkills.length > 0) {
-        setSkillCategories(remoteSkills);
-      }
-      if (remoteProjects && remoteProjects.length > 0) {
-        setProjects(remoteProjects);
-      }
-      if (remoteProfile) {
-        if (remoteProfile.email) HERO_DATA.socials.email = remoteProfile.email;
-        if (remoteProfile.github_url) HERO_DATA.socials.github = remoteProfile.github_url;
-        if (remoteProfile.gitlab_url) HERO_DATA.socials.gitlab = remoteProfile.gitlab_url;
-        if (remoteProfile.linkedin_url) HERO_DATA.socials.linkedin = remoteProfile.linkedin_url;
-      }
-    }
-
-    loadSupabaseData();
-  }, []);
+    refreshFromSupabase();
+  }, [refreshFromSupabase]);
 
   const handleAdminTrigger = () => {
     if (isAdmin) {
@@ -92,16 +103,6 @@ export function AppContent() {
     localStorage.removeItem('elias_is_admin');
     setIsAdmin(false);
     setIsAdminPanelOpen(false);
-  };
-
-  const handleUpdateSkills = (updatedCategories: SkillCategory[]) => {
-    setSkillCategories(updatedCategories);
-    localStorage.setItem('elias_skills', JSON.stringify(updatedCategories));
-  };
-
-  const handleUpdateProjects = (updatedProjects: Project[]) => {
-    setProjects(updatedProjects);
-    localStorage.setItem('elias_projects', JSON.stringify(updatedProjects));
   };
 
   return (
@@ -163,6 +164,7 @@ export function AppContent() {
         projects={projects}
         onUpdateSkills={handleUpdateSkills}
         onUpdateProjects={handleUpdateProjects}
+        onReloadFromDb={refreshFromSupabase}
       />
     </div>
   );

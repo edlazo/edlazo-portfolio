@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Plus, Trash2, LogOut, Check, Sparkles, FolderGit2, Cpu, User, Loader2, Save, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import type { SkillCategory, Project, SkillItem } from '../types/portfolio';
@@ -11,7 +11,7 @@ import {
   deleteProjectFromSupabase,
   saveProfileToSupabase,
 } from '../lib/supabaseService';
-import { HERO_DATA, PROFILE_DATA } from '../data/portfolioData';
+import { ABOUT_DATA, HERO_DATA, PROFILE_DATA } from '../data/portfolioData';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -22,6 +22,7 @@ interface AdminPanelProps {
   onUpdateSkills: (updatedCategories: SkillCategory[]) => void;
   onUpdateProjects: (updatedProjects: Project[]) => void;
   onUpdateProfile?: () => void;
+  onReloadFromDb?: () => Promise<void> | void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -32,6 +33,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   projects,
   onUpdateSkills,
   onUpdateProjects,
+  onReloadFromDb,
 }) => {
   const { language, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'skills' | 'projects' | 'profile'>('skills');
@@ -43,6 +45,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Skill state
   const [editingSkillOldName, setEditingSkillOldName] = useState<string | null>(null);
+  const [editingSkillOldCatId, setEditingSkillOldCatId] = useState<string | null>(null);
   const [newSkillName, setNewSkillName] = useState('');
   const [selectedCatId, setSelectedCatId] = useState(skillCategories[0]?.id || 'backend');
   const [newSkillLevel, setNewSkillLevel] = useState('Intermediate');
@@ -85,8 +88,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // SKILL HANDLERS
   // ----------------------------------------------------------------------
 
+  // A reload can swap the category ids (the local slugs are replaced by the
+  // database UUIDs), so keep the selector on a category that still exists.
+  useEffect(() => {
+    if (skillCategories.length > 0 && !skillCategories.some((cat) => cat.id === selectedCatId)) {
+      setSelectedCatId(skillCategories[0].id);
+    }
+  }, [skillCategories, selectedCatId]);
+
   const handleStartEditSkill = (catId: string, skill: SkillItem) => {
     setEditingSkillOldName(skill.name);
+    setEditingSkillOldCatId(catId);
     setSelectedCatId(catId);
     setNewSkillName(skill.name);
     setNewSkillLevel(skill.level || 'Intermediate');
@@ -95,6 +107,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleCancelEditSkill = () => {
     setEditingSkillOldName(null);
+    setEditingSkillOldCatId(null);
     setNewSkillName('');
     setIsPrimary(false);
   };
@@ -110,7 +123,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (editingSkillOldName) {
       // Edit existing skill
       if (isSupabaseConfigured) {
-        dbSuccess = await updateSkillInSupabase(editingSkillOldName, selectedCatId, skillObj);
+        dbSuccess = await updateSkillInSupabase(
+          editingSkillOldName,
+          editingSkillOldCatId || selectedCatId,
+          selectedCatId,
+          skillObj
+        );
       }
 
       const updated = skillCategories.map((cat) => {
@@ -126,6 +144,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
       onUpdateSkills(updated);
       setEditingSkillOldName(null);
+      setEditingSkillOldCatId(null);
     } else {
       // Create new skill
       if (isSupabaseConfigured) {
@@ -144,6 +163,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       onUpdateSkills(updated);
     }
 
+    if (dbSuccess) await onReloadFromDb?.();
+
     setNewSkillName('');
     setIsSaving(false);
     triggerSuccess(dbSuccess ? 'Skill guardado en Supabase' : 'Skill guardado en local');
@@ -151,8 +172,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleDeleteSkill = async (catId: string, skillName: string) => {
     setIsSaving(true);
+    let dbSuccess = false;
     if (isSupabaseConfigured) {
-      await deleteSkillFromSupabase(skillName);
+      dbSuccess = await deleteSkillFromSupabase(skillName, catId);
     }
 
     const updated = skillCategories.map((cat) => {
@@ -165,6 +187,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return cat;
     });
     onUpdateSkills(updated);
+    if (dbSuccess) await onReloadFromDb?.();
     setIsSaving(false);
     triggerSuccess('Skill eliminado');
   };
@@ -226,11 +249,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setShowProjectForm(true);
   };
 
+  // Writes every project back with its position as sort_order, which is the
+  // column fetchProjectsFromSupabase() orders by.
+  const syncProjectsToSupabase = async (list: Project[]): Promise<boolean> => {
+    const results = await Promise.all(
+      list.map((proj, index) => upsertProjectToSupabase(proj, index + 1))
+    );
+    return results.every(Boolean);
+  };
+
   const handleSaveProjectForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectTitle.trim()) return;
 
     setIsSaving(true);
+    const existingProject = editingProjectId
+      ? projects.find((p) => p.id === editingProjectId)
+      : undefined;
+
     const updatedProj: Project = {
       id: editingProjectId || `proj-${Date.now()}`,
       title: projectTitle,
@@ -243,13 +279,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       image: projectImage,
       demoUrl: projectDemoUrl || undefined,
       repoUrl: projectRepoUrl || undefined,
-      highlights: [],
+      // The form does not edit these two, so carry over whatever the project
+      // already has instead of overwriting the stored content with empties.
+      highlights: existingProject?.highlights || [],
+      architectureOverview: existingProject?.architectureOverview,
     };
-
-    let dbSuccess = false;
-    if (isSupabaseConfigured) {
-      dbSuccess = await upsertProjectToSupabase(updatedProj);
-    }
 
     let updatedList: Project[];
     if (editingProjectId) {
@@ -258,7 +292,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       updatedList = [updatedProj, ...projects];
     }
 
+    // Saving re-numbers the whole list: a new project is prepended, which shifts
+    // the sort_order of every project after it.
+    let dbSuccess = false;
+    if (isSupabaseConfigured) {
+      dbSuccess = await syncProjectsToSupabase(updatedList);
+    }
+
     onUpdateProjects(updatedList);
+    if (dbSuccess) await onReloadFromDb?.();
     setShowProjectForm(false);
     setEditingProjectId(null);
     setIsSaving(false);
@@ -268,16 +310,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleDeleteProject = async (projId: string) => {
     if (!confirm(language === 'es' ? '¿Eliminar este proyecto?' : 'Delete this project?')) return;
     setIsSaving(true);
+    let dbSuccess = false;
     if (isSupabaseConfigured) {
-      await deleteProjectFromSupabase(projId);
+      dbSuccess = await deleteProjectFromSupabase(projId);
     }
     const updated = projects.filter((p) => p.id !== projId);
     onUpdateProjects(updated);
+    if (dbSuccess) await onReloadFromDb?.();
     setIsSaving(false);
     triggerSuccess('Proyecto eliminado');
   };
 
-  const handleMoveProject = (index: number, direction: 'up' | 'down') => {
+  const handleMoveProject = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= projects.length) return;
 
@@ -288,9 +332,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     onUpdateProjects(listCopy);
 
-    // Sync order to Supabase if configured
     if (isSupabaseConfigured) {
-      listCopy.forEach((p) => upsertProjectToSupabase(p));
+      const dbSuccess = await syncProjectsToSupabase(listCopy);
+      if (dbSuccess) await onReloadFromDb?.();
     }
     triggerSuccess('Orden de proyectos actualizado');
   };
@@ -322,10 +366,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         location_en: PROFILE_DATA.location.en,
         education_es: PROFILE_DATA.education.es,
         education_en: PROFILE_DATA.education.en,
-        bio_es: 'Ingeniero Backend & Fullstack',
-        bio_en: 'Backend & Fullstack Engineer',
+        // bio_* is NOT NULL, so it has to travel on the insert path. Send the
+        // real bio instead of a placeholder, which would overwrite the stored one.
+        bio_es: [ABOUT_DATA.bio.es, ABOUT_DATA.bioSecondary.es].join('\n\n'),
+        bio_en: [ABOUT_DATA.bio.en, ABOUT_DATA.bioSecondary.en].join('\n\n'),
       });
     }
+
+    if (dbSuccess) await onReloadFromDb?.();
 
     setIsSaving(false);
     triggerSuccess(dbSuccess ? 'Perfil guardado en Supabase' : 'Perfil actualizado');

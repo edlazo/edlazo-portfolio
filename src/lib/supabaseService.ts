@@ -20,6 +20,36 @@ export interface DbProfile {
 }
 
 // ----------------------------------------------------------------------
+// ID HELPERS
+// Supabase rows are keyed by UUID, but the local fallback data in
+// portfolioData.ts uses readable ids ('backend', 'semanita', 'proj-1736...').
+// Those are matched against the `slug` column instead of the primary key.
+// ----------------------------------------------------------------------
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value?: string): boolean {
+  return Boolean(value && UUID_PATTERN.test(value));
+}
+
+async function resolveCategoryId(categoryId: string): Promise<string | null> {
+  if (isUuid(categoryId)) return categoryId;
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from('skill_categories')
+    .select('id')
+    .eq('slug', categoryId)
+    .maybeSingle();
+
+  if (error || !data) {
+    console.error('Could not resolve category slug in Supabase:', categoryId, error);
+    return null;
+  }
+  return data.id as string;
+}
+
+// ----------------------------------------------------------------------
 // SKILLS OPERATIONS
 // ----------------------------------------------------------------------
 
@@ -79,8 +109,11 @@ export async function saveSkillToSupabase(
     const level_es = levelParts[0]?.trim() || skill.level;
     const level_en = levelParts[1]?.trim() || levelParts[0]?.trim() || skill.level;
 
+    const resolvedCategoryId = await resolveCategoryId(categoryId);
+    if (!resolvedCategoryId) return false;
+
     const { error } = await supabase.from('skills').insert({
-      category_id: categoryId,
+      category_id: resolvedCategoryId,
       name: skill.name,
       level_es,
       level_en,
@@ -100,6 +133,7 @@ export async function saveSkillToSupabase(
 
 export async function updateSkillInSupabase(
   oldName: string,
+  oldCategoryId: string,
   categoryId: string,
   skill: { name: string; level: string; isPrimary?: boolean }
 ): Promise<boolean> {
@@ -110,16 +144,25 @@ export async function updateSkillInSupabase(
     const level_es = levelParts[0]?.trim() || skill.level;
     const level_en = levelParts[1]?.trim() || levelParts[0]?.trim() || skill.level;
 
+    // Scope by the category the skill currently lives in: names are only unique
+    // within a category, so filtering by name alone would hit homonyms elsewhere.
+    const [resolvedOldCategoryId, resolvedCategoryId] = await Promise.all([
+      resolveCategoryId(oldCategoryId),
+      resolveCategoryId(categoryId),
+    ]);
+    if (!resolvedOldCategoryId || !resolvedCategoryId) return false;
+
     const { error } = await supabase
       .from('skills')
       .update({
-        category_id: categoryId,
+        category_id: resolvedCategoryId,
         name: skill.name,
         level_es,
         level_en,
         is_primary: skill.isPrimary || false,
       })
-      .eq('name', oldName);
+      .eq('name', oldName)
+      .eq('category_id', resolvedOldCategoryId);
 
     if (error) {
       console.error('Error updating skill in Supabase:', error);
@@ -132,14 +175,21 @@ export async function updateSkillInSupabase(
   }
 }
 
-export async function deleteSkillFromSupabase(skillName: string): Promise<boolean> {
+export async function deleteSkillFromSupabase(
+  skillName: string,
+  categoryId: string
+): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
+    const resolvedCategoryId = await resolveCategoryId(categoryId);
+    if (!resolvedCategoryId) return false;
+
     const { error } = await supabase
       .from('skills')
       .delete()
-      .eq('name', skillName);
+      .eq('name', skillName)
+      .eq('category_id', resolvedCategoryId);
 
     if (error) {
       console.error('Error deleting skill from Supabase:', error);
@@ -188,7 +238,8 @@ export async function fetchProjectsFromSupabase(): Promise<Project[] | null> {
       image: p.image_url,
       demoUrl: p.demo_url || undefined,
       repoUrl: p.repo_url || undefined,
-      highlights: [],
+      highlights: Array.isArray(p.highlights) ? p.highlights : [],
+      architectureOverview: p.architecture_overview || undefined,
     }));
 
     return formatted;
@@ -198,7 +249,10 @@ export async function fetchProjectsFromSupabase(): Promise<Project[] | null> {
   }
 }
 
-export async function upsertProjectToSupabase(project: Project): Promise<boolean> {
+export async function upsertProjectToSupabase(
+  project: Project,
+  sortOrder?: number
+): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
@@ -216,13 +270,27 @@ export async function upsertProjectToSupabase(project: Project): Promise<boolean
       image_url: project.image,
       demo_url: project.demoUrl,
       repo_url: project.repoUrl,
+      highlights: project.highlights || [],
+      architecture_overview: project.architectureOverview || null,
     };
 
-    if (project.id && project.id.includes('-')) {
-      payload.id = project.id;
+    if (typeof sortOrder === 'number') {
+      payload.sort_order = sortOrder;
     }
 
-    const { error } = await supabase.from('projects').upsert(payload);
+    // A UUID id means the row came from the database, so upsert on the primary
+    // key. Anything else is a local id ('semanita', 'proj-1736...') and is
+    // matched against the slug column, which is unique.
+    let query;
+    if (isUuid(project.id)) {
+      payload.id = project.id;
+      query = supabase.from('projects').upsert(payload);
+    } else {
+      payload.slug = project.id;
+      query = supabase.from('projects').upsert(payload, { onConflict: 'slug' });
+    }
+
+    const { error } = await query;
     if (error) {
       console.error('Error upserting project in Supabase:', error);
       return false;
@@ -238,7 +306,10 @@ export async function deleteProjectFromSupabase(projectId: string): Promise<bool
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
-    const { error } = await supabase.from('projects').delete().eq('id', projectId);
+    const { error } = await supabase
+      .from('projects')
+      .delete()
+      .eq(isUuid(projectId) ? 'id' : 'slug', projectId);
     if (error) {
       console.error('Error deleting project from Supabase:', error);
       return false;
