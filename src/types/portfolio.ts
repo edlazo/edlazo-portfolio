@@ -1,6 +1,10 @@
 export type Language = 'es' | 'en';
 
 export interface SkillItem {
+  /** Database id (absent in the local fallback data and for unsaved skills). */
+  id?: string;
+  /** Stored sort_order, used to normalize gaps when a category is saved. */
+  sortOrder?: number;
   name: string;
   level?: string;
   isPrimary?: boolean;

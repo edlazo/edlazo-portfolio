@@ -124,6 +124,25 @@ venir de la base (podés comprobarlo cambiando un `level_es` en Supabase y recar
 redeploy en Vercel y repetí la comprobación en <https://www.eliaslazo.dev/>. Con los 404
 eliminados, Best Practices de Lighthouse debería volver a 100.
 
+## 3b. Actualización: guardado de skills con botón "Guardar cambios"
+
+El editor de skills del AdminPanel ya no escribe en cada acción: acumula los cambios
+(altas, ediciones, borrados y el orden por arrastre) y los envía todos juntos a la función
+`public.save_skills(changes jsonb)`, que los aplica en **una sola transacción** (si algo falla,
+no se guarda nada). La función está en la sección 5 de `supabase_schema.sql`.
+
+Para crearla en una base que ya tiene datos:
+
+1. SQL Editor → **New query**.
+2. Pegá el contenido completo de `supabase_schema.sql` y pulsá **Run**.
+
+Es seguro re-ejecutarlo: todo el script es idempotente y **no borra ni modifica filas**
+(verificado corriendo schema + seed + schema en Postgres). No hace falta volver a correr el seed.
+
+Si después de guardar desde el panel aparece "No se guardó nada en Supabase" y en la consola
+figura `PGRST202 Could not find the function public.save_skills`, la función todavía no existe
+o el cache de PostgREST no se refrescó: ejecutá `NOTIFY pgrst, 'reload schema';`.
+
 ## 4. Estructura final del schema
 
 | Tabla | Columnas clave | RLS |

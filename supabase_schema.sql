@@ -134,7 +134,75 @@ GRANT SELECT ON public.profile, public.skill_categories, public.skills, public.p
 GRANT INSERT, UPDATE, DELETE ON public.profile, public.skill_categories, public.skills, public.projects TO authenticated;
 
 -- --------------------------------------------------------
--- 5. REFRESCAR EL CACHE DE ESQUEMA DE POSTGREST
+-- 5. GUARDADO ATOMICO DE SKILLS (AdminPanel -> boton "Guardar cambios")
+--    Aplica todos los cambios pendientes en UNA transaccion: si cualquier paso
+--    falla, no se guarda nada. SECURITY INVOKER: corre con los permisos de quien
+--    llama, asi que las politicas RLS de arriba siguen aplicando.
+--
+--    changes = {
+--      "deleted":  ["<uuid>", ...],
+--      "updated":  [{"id", "category_id", "name", "level_es", "level_en", "is_primary", "sort_order"}, ...],
+--      "inserted": [{"category_id", "name", "level_es", "level_en", "is_primary", "sort_order"}, ...]
+--    }
+-- --------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.save_skills(changes jsonb)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $fn$
+DECLARE
+    item     jsonb;
+    affected integer;
+BEGIN
+    -- RLS no da error cuando bloquea un UPDATE/DELETE (afecta 0 filas), asi que
+    -- se exige sesion explicitamente y se controla cada fila afectada.
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'save_skills: se requiere una sesion autenticada'
+            USING ERRCODE = '42501';
+    END IF;
+
+    -- 1) Borrados primero: permite borrar una skill y volver a crear otra con el
+    --    mismo nombre en la misma categoria dentro del mismo guardado.
+    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(changes->'deleted', '[]'::jsonb)) LOOP
+        DELETE FROM public.skills WHERE id = (item #>> '{}')::uuid;
+        GET DIAGNOSTICS affected = ROW_COUNT;
+        IF affected = 0 THEN
+            RAISE EXCEPTION 'save_skills: no se encontro la skill a borrar %', item #>> '{}'
+                USING ERRCODE = 'P0002';
+        END IF;
+    END LOOP;
+
+    -- 2) Ediciones: nombre, nivel, destacada, categoria y posicion.
+    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(changes->'updated', '[]'::jsonb)) LOOP
+        UPDATE public.skills SET
+            category_id = (item->>'category_id')::uuid,
+            name        = item->>'name',
+            level_es    = item->>'level_es',
+            level_en    = item->>'level_en',
+            is_primary  = COALESCE((item->>'is_primary')::boolean, FALSE),
+            sort_order  = (item->>'sort_order')::integer
+        WHERE id = (item->>'id')::uuid;
+        GET DIAGNOSTICS affected = ROW_COUNT;
+        IF affected = 0 THEN
+            RAISE EXCEPTION 'save_skills: no se encontro la skill a editar %', item->>'id'
+                USING ERRCODE = 'P0002';
+        END IF;
+    END LOOP;
+
+    -- 3) Altas.
+    INSERT INTO public.skills (category_id, name, level_es, level_en, is_primary, sort_order)
+    SELECT x.category_id, x.name, x.level_es, x.level_en, COALESCE(x.is_primary, FALSE), x.sort_order
+    FROM jsonb_to_recordset(COALESCE(changes->'inserted', '[]'::jsonb))
+        AS x(category_id uuid, name text, level_es text, level_en text, is_primary boolean, sort_order integer);
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION public.save_skills(jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.save_skills(jsonb) TO authenticated;
+
+-- --------------------------------------------------------
+-- 6. REFRESCAR EL CACHE DE ESQUEMA DE POSTGREST
 --    Sin esto, /rest/v1/<tabla> puede seguir devolviendo 404 (PGRST205) unos segundos.
 -- --------------------------------------------------------
 NOTIFY pgrst, 'reload schema';

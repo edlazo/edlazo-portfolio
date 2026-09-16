@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { SkillCategory, Project } from '../types/portfolio';
+import type { SkillChanges } from './skillChanges';
 
 export interface DbProfile {
   id?: string;
@@ -97,6 +98,8 @@ export async function fetchSkillsFromSupabase(): Promise<SkillCategory[] | null>
       skills: (skills || [])
         .filter((s: any) => s.category_id === cat.id)
         .map((s: any) => ({
+          id: s.id,
+          sortOrder: s.sort_order,
           name: s.name,
           level: s.level_es ? `${s.level_es} / ${s.level_en}` : s.level_en,
           isPrimary: s.is_primary || false,
@@ -110,146 +113,41 @@ export async function fetchSkillsFromSupabase(): Promise<SkillCategory[] | null>
   }
 }
 
-export async function saveSkillToSupabase(
-  categoryId: string,
-  skill: { name: string; level: string; isPrimary?: boolean },
-  sortOrder?: number
-): Promise<boolean> {
+// Sends every pending skill change in one call to the `save_skills` database
+// function, which applies them in a single transaction (all or nothing).
+export async function saveSkillChangesToSupabase(changes: SkillChanges): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
-    const levelParts = skill.level.split('/');
-    const level_es = levelParts[0]?.trim() || skill.level;
-    const level_en = levelParts[1]?.trim() || levelParts[0]?.trim() || skill.level;
+    // The local fallback data uses readable category ids ('backend'); the
+    // database function expects UUIDs.
+    const categoryIds = new Map<string, string | null>();
+    for (const row of [...changes.updated, ...changes.inserted]) {
+      if (!categoryIds.has(row.category_id)) {
+        categoryIds.set(row.category_id, await resolveCategoryId(row.category_id));
+      }
+    }
+    if ([...categoryIds.values()].some((id) => !id)) return false;
+    const withUuid = <T extends { category_id: string }>(row: T): T => ({
+      ...row,
+      category_id: categoryIds.get(row.category_id) as string,
+    });
 
-    const resolvedCategoryId = await resolveCategoryId(categoryId);
-    if (!resolvedCategoryId) return false;
-
-    const { data, error } = await supabase
-      .from('skills')
-      .insert({
-        category_id: resolvedCategoryId,
-        name: skill.name,
-        level_es,
-        level_en,
-        is_primary: skill.isPrimary || false,
-        ...(typeof sortOrder === 'number' ? { sort_order: sortOrder } : {}),
-      })
-      .select('id');
+    const { error } = await supabase.rpc('save_skills', {
+      changes: {
+        deleted: changes.deleted,
+        updated: changes.updated.map(withUuid),
+        inserted: changes.inserted.map(withUuid),
+      },
+    });
 
     if (error) {
-      console.error('Error inserting skill in Supabase:', error);
+      console.error('Error saving skills in Supabase (nothing was applied):', error);
       return false;
     }
-    return affectedRows('Insert skill', data);
+    return true;
   } catch (e) {
-    console.error('Failed to save skill to Supabase:', e);
-    return false;
-  }
-}
-
-export async function updateSkillInSupabase(
-  oldName: string,
-  oldCategoryId: string,
-  categoryId: string,
-  skill: { name: string; level: string; isPrimary?: boolean }
-): Promise<boolean> {
-  if (!isSupabaseConfigured || !supabase) return false;
-
-  try {
-    const levelParts = skill.level.split('/');
-    const level_es = levelParts[0]?.trim() || skill.level;
-    const level_en = levelParts[1]?.trim() || levelParts[0]?.trim() || skill.level;
-
-    // Scope by the category the skill currently lives in: names are only unique
-    // within a category, so filtering by name alone would hit homonyms elsewhere.
-    const [resolvedOldCategoryId, resolvedCategoryId] = await Promise.all([
-      resolveCategoryId(oldCategoryId),
-      resolveCategoryId(categoryId),
-    ]);
-    if (!resolvedOldCategoryId || !resolvedCategoryId) return false;
-
-    const { data, error } = await supabase
-      .from('skills')
-      .update({
-        category_id: resolvedCategoryId,
-        name: skill.name,
-        level_es,
-        level_en,
-        is_primary: skill.isPrimary || false,
-      })
-      .eq('name', oldName)
-      .eq('category_id', resolvedOldCategoryId)
-      .select('id');
-
-    if (error) {
-      console.error('Error updating skill in Supabase:', error);
-      return false;
-    }
-    return affectedRows('Update skill', data);
-  } catch (e) {
-    console.error('Failed to update skill in Supabase:', e);
-    return false;
-  }
-}
-
-export async function deleteSkillFromSupabase(
-  skillName: string,
-  categoryId: string
-): Promise<boolean> {
-  if (!isSupabaseConfigured || !supabase) return false;
-
-  try {
-    const resolvedCategoryId = await resolveCategoryId(categoryId);
-    if (!resolvedCategoryId) return false;
-
-    const { data, error } = await supabase
-      .from('skills')
-      .delete()
-      .eq('name', skillName)
-      .eq('category_id', resolvedCategoryId)
-      .select('id');
-
-    if (error) {
-      console.error('Error deleting skill from Supabase:', error);
-      return false;
-    }
-    return affectedRows('Delete skill', data);
-  } catch (e) {
-    console.error('Failed to delete skill from Supabase:', e);
-    return false;
-  }
-}
-
-export async function reorderSkillsInSupabase(
-  categoryId: string,
-  orderedNames: string[]
-): Promise<boolean> {
-  if (!isSupabaseConfigured || !supabase) return false;
-
-  try {
-    const resolvedCategoryId = await resolveCategoryId(categoryId);
-    if (!resolvedCategoryId) return false;
-    const client = supabase;
-
-    const results = await Promise.all(
-      orderedNames.map(async (name, index) => {
-        const { data, error } = await client
-          .from('skills')
-          .update({ sort_order: index + 1 })
-          .eq('name', name)
-          .eq('category_id', resolvedCategoryId)
-          .select('id');
-        if (error) {
-          console.error('Error reordering skill in Supabase:', name, error);
-          return false;
-        }
-        return affectedRows(`Reorder skill "${name}"`, data);
-      })
-    );
-    return results.every(Boolean);
-  } catch (e) {
-    console.error('Failed to reorder skills in Supabase:', e);
+    console.error('Failed to save skills to Supabase:', e);
     return false;
   }
 }

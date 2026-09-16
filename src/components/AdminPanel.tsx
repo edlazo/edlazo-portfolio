@@ -1,18 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { X, Plus, Trash2, LogOut, Check, AlertCircle, Sparkles, FolderGit2, Cpu, User, Loader2, Save, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import type { SkillCategory, Project, SkillItem } from '../types/portfolio';
+import type { SkillCategory, Project } from '../types/portfolio';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
-  saveSkillToSupabase,
-  updateSkillInSupabase,
-  deleteSkillFromSupabase,
-  reorderSkillsInSupabase,
   upsertProjectToSupabase,
   deleteProjectFromSupabase,
   saveProfileToSupabase,
 } from '../lib/supabaseService';
 import { ABOUT_DATA, HERO_DATA, PROFILE_DATA } from '../data/portfolioData';
+import { SkillsEditor } from './SkillsEditor';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -44,13 +41,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Skill state
-  const [editingSkillOldName, setEditingSkillOldName] = useState<string | null>(null);
-  const [editingSkillOldCatId, setEditingSkillOldCatId] = useState<string | null>(null);
-  const [newSkillName, setNewSkillName] = useState('');
-  const [selectedCatId, setSelectedCatId] = useState(skillCategories[0]?.id || 'backend');
-  const [newSkillLevel, setNewSkillLevel] = useState('Intermediate');
-  const [isPrimary, setIsPrimary] = useState(false);
+  // Unsaved changes in the skills editor (it keeps its own draft).
+  const [skillsDirty, setSkillsDirty] = useState(false);
 
   // Project state
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
@@ -73,14 +65,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [profileGithub, setProfileGithub] = useState(HERO_DATA.socials.github);
   const [profileGitlab, setProfileGitlab] = useState(HERO_DATA.socials.gitlab);
   const [profileLinkedin, setProfileLinkedin] = useState(HERO_DATA.socials.linkedin);
-
-  // A reload can swap the category ids (the local slugs are replaced by the
-  // database UUIDs), so keep the selector on a category that still exists.
-  useEffect(() => {
-    if (skillCategories.length > 0 && !skillCategories.some((cat) => cat.id === selectedCatId)) {
-      setSelectedCatId(skillCategories[0].id);
-    }
-  }, [skillCategories, selectedCatId]);
 
   // All hooks must run before this early return (Rules of Hooks).
   if (!isOpen) return null;
@@ -105,112 +89,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   };
 
-  // ----------------------------------------------------------------------
-  // SKILL HANDLERS
-  // ----------------------------------------------------------------------
-
-  const handleStartEditSkill = (catId: string, skill: SkillItem) => {
-    setEditingSkillOldName(skill.name);
-    setEditingSkillOldCatId(catId);
-    setSelectedCatId(catId);
-    setNewSkillName(skill.name);
-    setNewSkillLevel(skill.level || 'Intermediate');
-    setIsPrimary(Boolean(skill.isPrimary));
-  };
-
-  const handleCancelEditSkill = () => {
-    setEditingSkillOldName(null);
-    setEditingSkillOldCatId(null);
-    setNewSkillName('');
-    setIsPrimary(false);
-  };
-
-  const handleSaveSkillForm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newSkillName.trim()) return;
-
-    setIsSaving(true);
-    const skillObj = { name: newSkillName.trim(), level: newSkillLevel, isPrimary };
-    const isEditing = Boolean(editingSkillOldName);
-
-    let updated: SkillCategory[];
-    if (isEditing) {
-      updated = skillCategories.map((cat) => {
-        // remove old skill from whichever category it was in
-        const filteredSkills = cat.skills.filter((s) => s.name !== editingSkillOldName);
-        if (cat.id === selectedCatId) {
-          return { ...cat, skills: [...filteredSkills, skillObj] };
-        }
-        return { ...cat, skills: filteredSkills };
-      });
-    } else {
-      updated = skillCategories.map((cat) =>
-        cat.id === selectedCatId ? { ...cat, skills: [...cat.skills, skillObj] } : cat
-      );
-    }
-
-    if (isSupabaseConfigured) {
-      const targetCategory = skillCategories.find((cat) => cat.id === selectedCatId);
-      const ok = isEditing
-        ? await updateSkillInSupabase(
-            editingSkillOldName as string,
-            editingSkillOldCatId || selectedCatId,
-            selectedCatId,
-            skillObj
-          )
-        : await saveSkillToSupabase(selectedCatId, skillObj, (targetCategory?.skills.length ?? 0) + 1);
-      if (!ok) return showDbError();
-    }
-
-    onUpdateSkills(updated);
-    if (isEditing) {
-      setEditingSkillOldName(null);
-      setEditingSkillOldCatId(null);
-    }
-    if (isSupabaseConfigured) await onReloadFromDb?.();
-
-    setNewSkillName('');
-    setIsSaving(false);
-    showStatus(isSupabaseConfigured ? 'Skill guardado en Supabase' : 'Skill guardado en local');
-  };
-
-  const handleDeleteSkill = async (catId: string, skillName: string) => {
-    setIsSaving(true);
-    if (isSupabaseConfigured && !(await deleteSkillFromSupabase(skillName, catId))) {
-      return showDbError();
-    }
-
-    const updated = skillCategories.map((cat) =>
-      cat.id === catId ? { ...cat, skills: cat.skills.filter((s) => s.name !== skillName) } : cat
+  const confirmDiscardSkills = () =>
+    !skillsDirty ||
+    window.confirm(
+      language === 'es'
+        ? 'Tenés cambios de skills sin guardar. ¿Descartarlos?'
+        : 'You have unsaved skill changes. Discard them?'
     );
-    onUpdateSkills(updated);
-    if (isSupabaseConfigured) await onReloadFromDb?.();
-    setIsSaving(false);
-    showStatus('Skill eliminado');
+
+  const handleClose = () => {
+    if (confirmDiscardSkills()) onClose();
   };
 
-  const handleMoveSkill = async (catId: string, index: number, direction: 'up' | 'down') => {
-    const category = skillCategories.find((cat) => cat.id === catId);
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (!category || targetIndex < 0 || targetIndex >= category.skills.length) return;
-
-    const skillsCopy = [...category.skills];
-    [skillsCopy[index], skillsCopy[targetIndex]] = [skillsCopy[targetIndex], skillsCopy[index]];
-
-    setIsSaving(true);
-    if (
-      isSupabaseConfigured &&
-      !(await reorderSkillsInSupabase(catId, skillsCopy.map((skill) => skill.name)))
-    ) {
-      return showDbError();
-    }
-
-    onUpdateSkills(
-      skillCategories.map((cat) => (cat.id === catId ? { ...cat, skills: skillsCopy } : cat))
-    );
-    if (isSupabaseConfigured) await onReloadFromDb?.();
-    setIsSaving(false);
-    showStatus('Orden de habilidades actualizado');
+  const handleLogout = () => {
+    if (confirmDiscardSkills()) onLogout();
   };
 
   // ----------------------------------------------------------------------
@@ -406,15 +298,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={onLogout}
+              onClick={handleLogout}
               className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl text-xs flex items-center gap-1.5 transition-colors border border-rose-500/20"
             >
               <LogOut className="w-4 h-4" />
               <span>{language === 'es' ? 'Salir' : 'Logout'}</span>
             </button>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors"
+              aria-label={language === 'es' ? 'Cerrar panel' : 'Close panel'}
             >
               <X className="w-5 h-5" />
             </button>
@@ -422,10 +315,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b border-slate-800 bg-slate-950/60 px-6 pt-3 gap-2">
+        <div className="flex border-b border-slate-800 bg-slate-950/60 px-4 sm:px-6 pt-3 gap-1 sm:gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('skills')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'skills'
                 ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -433,10 +326,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           >
             <Cpu className="w-4 h-4" />
             {language === 'es' ? 'Habilidades (Skills)' : 'Skills'}
+            {skillsDirty && (
+              <span
+                className="w-2 h-2 rounded-full bg-amber-400"
+                title={language === 'es' ? 'Cambios sin guardar' : 'Unsaved changes'}
+                aria-label={language === 'es' ? 'Cambios sin guardar' : 'Unsaved changes'}
+              />
+            )}
           </button>
           <button
             onClick={() => setActiveTab('projects')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'projects'
                 ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -447,7 +347,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'profile'
                 ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -485,156 +385,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           aria-label={language === 'es' ? 'Contenido del panel' : 'Panel content'}
         >
           {/* SKILLS TAB */}
-          {activeTab === 'skills' && (
-            <div className="space-y-6">
-              {/* Add / Edit Skill Form */}
-              <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-cyan-400 flex items-center gap-2">
-                    {editingSkillOldName ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                    {editingSkillOldName
-                      ? (language === 'es' ? `Editar Skill: "${editingSkillOldName}"` : `Edit Skill: "${editingSkillOldName}"`)
-                      : (language === 'es' ? 'Agregar Nueva Habilidad' : 'Add New Skill')}
-                  </h3>
-                  {editingSkillOldName && (
-                    <button
-                      onClick={handleCancelEditSkill}
-                      className="text-xs text-slate-400 hover:text-white underline"
-                    >
-                      {language === 'es' ? 'Cancelar Edición' : 'Cancel Edit'}
-                    </button>
-                  )}
-                </div>
-
-                <form onSubmit={handleSaveSkillForm} className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">Categoría</label>
-                    <select
-                      value={selectedCatId}
-                      onChange={(e) => setSelectedCatId(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200"
-                    >
-                      {skillCategories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {t(cat.category)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">Nombre Skill</label>
-                      <input
-                        type="text"
-                        value={newSkillName}
-                        onChange={(e) => setNewSkillName(e.target.value)}
-                        placeholder="Ej: Go, Docker, GraphQL"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">Nivel</label>
-                      <select
-                        value={newSkillLevel}
-                        onChange={(e) => setNewSkillLevel(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200"
-                      >
-                        <option value="Básico / Basic">Básico / Basic</option>
-                        <option value="Intermedio / Intermediate">Intermedio / Intermediate</option>
-                        <option value="Avanzado / Advanced">Avanzado / Advanced</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="isPrimary"
-                      checked={isPrimary}
-                      onChange={(e) => setIsPrimary(e.target.checked)}
-                      className="rounded border-slate-700 bg-slate-950 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    <label htmlFor="isPrimary" className="text-xs text-slate-300">
-                      Destacar como habilidad principal
-                    </label>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="w-full py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
-                  >
-                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingSkillOldName ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                    {editingSkillOldName
-                      ? (language === 'es' ? 'Guardar Cambios de Skill' : 'Save Skill Changes')
-                      : (language === 'es' ? 'Añadir Habilidad' : 'Add Skill')}
-                  </button>
-                </form>
-              </div>
-
-              {/* List skills per category with edit & reordering controls */}
-              <div className="space-y-4">
-                {skillCategories.map((cat) => (
-                  <div key={cat.id} className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-3">
-                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                      {t(cat.category)} ({cat.skills.length})
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {cat.skills.map((skill, idx) => (
-                        <div
-                          key={skill.name}
-                          className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs flex items-center gap-2 group hover:border-cyan-500/40"
-                        >
-                          <span className="text-slate-200 font-medium">{skill.name}</span>
-                          {skill.level && (
-                            <span className="text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
-                              {skill.level}
-                            </span>
-                          )}
-
-                          {/* Controls: Reorder Up/Down, Edit, Delete */}
-                          <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-800">
-                            <button
-                              onClick={() => handleMoveSkill(cat.id, idx, 'up')}
-                              disabled={idx === 0}
-                              className="text-slate-500 hover:text-cyan-400 disabled:opacity-20"
-                              title="Mover arriba"
-                            >
-                              <ChevronUp className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleMoveSkill(cat.id, idx, 'down')}
-                              disabled={idx === cat.skills.length - 1}
-                              className="text-slate-500 hover:text-cyan-400 disabled:opacity-20"
-                              title="Mover abajo"
-                            >
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleStartEditSkill(cat.id, skill)}
-                              className="text-slate-500 hover:text-amber-400 transition-colors"
-                              title="Editar skill"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteSkill(cat.id, skill.name)}
-                              disabled={isSaving}
-                              className="text-slate-500 hover:text-rose-400 transition-colors disabled:opacity-50"
-                              title="Eliminar skill"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Kept mounted while other tabs are open so its unsaved draft survives
+              switching tabs; it's only hidden. */}
+          <div hidden={activeTab !== 'skills'}>
+            <SkillsEditor
+              skillCategories={skillCategories}
+              onUpdateSkills={onUpdateSkills}
+              onReloadFromDb={onReloadFromDb}
+              onDirtyChange={setSkillsDirty}
+              showStatus={showStatus}
+            />
+          </div>
 
           {/* PROJECTS TAB */}
           {activeTab === 'projects' && (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { About } from './components/About';
@@ -8,7 +8,6 @@ import { ProjectModal } from './components/ProjectModal';
 import { EngineeringPhilosophy } from './components/EngineeringPhilosophy';
 import { ContactModal } from './components/ContactModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
-import { AdminPanel } from './components/AdminPanel';
 import { Footer } from './components/Footer';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import {
@@ -23,6 +22,11 @@ import {
   fetchProjectsFromSupabase,
   fetchProfileFromSupabase,
 } from './lib/supabaseService';
+
+// The admin panel (and the drag & drop library it uses) is only downloaded
+// when it's opened, so regular visitors never pay for it.
+const loadAdminPanel = () => import('./components/AdminPanel');
+const AdminPanel = lazy(() => loadAdminPanel().then((module) => ({ default: module.AdminPanel })));
 
 export function AppContent() {
   const { language } = useLanguage();
@@ -115,6 +119,10 @@ export function AppContent() {
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  useEffect(() => {
+    if (isAdmin) loadAdminPanel();
+  }, [isAdmin]);
+
   const handleAdminTrigger = () => {
     if (isAdmin) {
       setIsAdminPanelOpen(true);
@@ -187,16 +195,28 @@ export function AppContent() {
         onLoginSuccess={handleLoginSuccess}
       />
 
-      <AdminPanel
-        isOpen={isAdminPanelOpen}
-        onClose={() => setIsAdminPanelOpen(false)}
-        onLogout={handleLogout}
-        skillCategories={skillCategories}
-        projects={projects}
-        onUpdateSkills={handleUpdateSkills}
-        onUpdateProjects={handleUpdateProjects}
-        onReloadFromDb={refreshFromSupabase}
-      />
+      {isAdminPanelOpen && (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" role="status">
+              <span className="text-xs font-mono text-slate-300">
+                {language === 'es' ? 'Cargando panel…' : 'Loading panel…'}
+              </span>
+            </div>
+          }
+        >
+          <AdminPanel
+            isOpen={isAdminPanelOpen}
+            onClose={() => setIsAdminPanelOpen(false)}
+            onLogout={handleLogout}
+            skillCategories={skillCategories}
+            projects={projects}
+            onUpdateSkills={handleUpdateSkills}
+            onUpdateProjects={handleUpdateProjects}
+            onReloadFromDb={refreshFromSupabase}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
