@@ -2,6 +2,7 @@ import React from 'react';
 import { MapPin, GraduationCap, Heart, User, CheckCircle2, Compass } from 'lucide-react';
 import { ABOUT_DATA, PROFILE_DATA } from '../data/portfolioData';
 import { useLanguage } from '../context/LanguageContext';
+import { Reveal } from './Reveal';
 
 export const About: React.FC = () => {
   const { t } = useLanguage();
@@ -10,19 +11,21 @@ export const About: React.FC = () => {
     <section id="about" className="py-20 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-mono mb-3">
-            <User className="w-3.5 h-3.5" />
-            <span>{t(ABOUT_DATA.title)}</span>
+        <Reveal>
+          <div className="mb-12">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-mono mb-3">
+              <User className="w-3.5 h-3.5" />
+              <span>{t(ABOUT_DATA.title)}</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+              {t(ABOUT_DATA.subtitle)}
+            </h2>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            {t(ABOUT_DATA.subtitle)}
-          </h2>
-        </div>
+        </Reveal>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           {/* Main Story Column */}
-          <div className="lg:col-span-7 space-y-6">
+          <Reveal className="lg:col-span-7 space-y-6">
             <div className="glass-panel p-8 rounded-3xl relative overflow-hidden space-y-6 border border-slate-800">
               <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -78,7 +81,7 @@ export const About: React.FC = () => {
                 </p>
               </div>
             </div>
-          </div>
+          </Reveal>
 
           {/* Pillars Column */}
           <div className="lg:col-span-5 space-y-4">
@@ -87,25 +90,26 @@ export const About: React.FC = () => {
               <span>{t({ es: 'Lo que guía mi trabajo', en: 'What Guides My Work' })}</span>
             </h3>
 
-            {ABOUT_DATA.pillars.map((pillar) => (
-              <div
-                key={t(pillar.title)}
-                className="glass-panel p-5 rounded-2xl border border-slate-800/80 hover:border-amber-500/30 transition-all duration-300 group"
-              >
-                <div className="flex items-start gap-3.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white font-heading group-hover:text-amber-400 transition-colors">
-                      {t(pillar.title)}
-                    </h4>
-                    <p className="text-xs text-slate-300 leading-relaxed mt-1">
-                      {t(pillar.description)}
-                    </p>
+            {ABOUT_DATA.pillars.map((pillar, idx) => (
+              <Reveal key={t(pillar.title)} delay={Math.min(idx, 3) * 100}>
+                <div
+                  className="glass-panel p-5 rounded-2xl border border-slate-800/80 hover:border-amber-500/30 transition-all duration-300 group"
+                >
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white font-heading group-hover:text-amber-400 transition-colors">
+                        {t(pillar.title)}
+                      </h4>
+                      <p className="text-xs text-slate-300 leading-relaxed mt-1">
+                        {t(pillar.description)}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>

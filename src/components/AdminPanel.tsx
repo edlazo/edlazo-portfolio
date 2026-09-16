@@ -73,6 +73,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [profileGitlab, setProfileGitlab] = useState(HERO_DATA.socials.gitlab);
   const [profileLinkedin, setProfileLinkedin] = useState(HERO_DATA.socials.linkedin);
 
+  // A reload can swap the category ids (the local slugs are replaced by the
+  // database UUIDs), so keep the selector on a category that still exists.
+  useEffect(() => {
+    if (skillCategories.length > 0 && !skillCategories.some((cat) => cat.id === selectedCatId)) {
+      setSelectedCatId(skillCategories[0].id);
+    }
+  }, [skillCategories, selectedCatId]);
+
+  // All hooks must run before this early return (Rules of Hooks).
   if (!isOpen) return null;
 
   const triggerSuccess = (msg?: string) => {
@@ -87,14 +96,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // ----------------------------------------------------------------------
   // SKILL HANDLERS
   // ----------------------------------------------------------------------
-
-  // A reload can swap the category ids (the local slugs are replaced by the
-  // database UUIDs), so keep the selector on a category that still exists.
-  useEffect(() => {
-    if (skillCategories.length > 0 && !skillCategories.some((cat) => cat.id === selectedCatId)) {
-      setSelectedCatId(skillCategories[0].id);
-    }
-  }, [skillCategories, selectedCatId]);
 
   const handleStartEditSkill = (catId: string, skill: SkillItem) => {
     setEditingSkillOldName(skill.name);
@@ -381,7 +382,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-2xl bg-[#0b0f19] border-l border-cyan-500/30 h-full flex flex-col text-slate-100 shadow-2xl">
+      <div className="relative w-full max-w-2xl bg-[#0b0f19] border-l border-cyan-500/30 h-full flex flex-col text-slate-100 shadow-2xl animate-drawer-in">
         {/* Header */}
         <div className="p-6 bg-slate-900/90 border-b border-slate-800 flex justify-between items-center">
           <div className="flex items-center gap-3">

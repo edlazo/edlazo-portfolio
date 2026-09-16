@@ -41,10 +41,10 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/80 backdrop-blur-md"
+        className="fixed inset-0 bg-slate-950/80 backdrop-blur-md animate-fade-in"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -56,7 +56,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
         aria-modal="true"
         aria-labelledby="contact-modal-title"
         tabIndex={-1}
-        className="relative w-full max-w-lg glass-panel bg-slate-900/95 border border-slate-700/80 rounded-3xl shadow-2xl p-6 sm:p-8 z-10 animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-lg glass-panel bg-slate-900/95 border border-slate-700/80 rounded-3xl shadow-2xl p-6 sm:p-8 z-10 animate-dialog-in"
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
@@ -111,7 +111,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
 
         {/* Message Form */}
         {submitted ? (
-          <div className="py-12 text-center space-y-3 animate-in fade-in" role="status" aria-live="polite">
+          <div className="py-12 text-center space-y-3 animate-fade-in" role="status" aria-live="polite">
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
               <Check className="w-6 h-6" />
             </div>

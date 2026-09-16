@@ -102,7 +102,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenContact, onOpenAdminLogin,
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div id="mobile-nav" className="lg:hidden glass-panel border-t border-slate-800/80 px-6 py-6 mt-3 space-y-4 animate-in fade-in slide-in-from-top-4">
+        <div id="mobile-nav" className="lg:hidden glass-panel border-t border-slate-800/80 px-6 py-6 mt-3 space-y-4 animate-slide-down">
           <nav className="flex flex-col gap-4" aria-label="Principal (móvil)">
             {navLinks.map((link) => (
               <a

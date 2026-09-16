@@ -58,7 +58,7 @@ export const ProfileWidget: React.FC<ProfileWidgetProps> = ({ onOpenAdminLogin, 
 
       {/* Profile Card Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 bg-[#0c111d] border border-slate-700/90 rounded-3xl p-5 shadow-2xl z-50 transform origin-top-right transition-all duration-200 animate-in fade-in zoom-in-95">
+        <div className="absolute right-0 mt-3 w-80 bg-[#0c111d] border border-slate-700/90 rounded-3xl p-5 shadow-2xl z-50 origin-top-right animate-dropdown-in">
           <div className="flex items-center gap-3.5 pb-4 border-b border-slate-800">
             <div className="relative w-14 h-14 rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-lg shrink-0">
               <img

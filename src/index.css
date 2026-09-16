@@ -77,6 +77,29 @@ summary:focus-visible,
   transform: translateY(0);
 }
 
+/* Scroll entrance animation (see components/Reveal.tsx). Ends on
+   transform: none so revealed content doesn't keep a stacking context. */
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 1.5rem, 0);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media print {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Respect the OS "reduce motion" setting (WCAG 2.3.3 / 2.2.2): kill the
    infinite ambient animations and collapse transitions to a near-instant
    change instead of removing them, so state changes stay perceivable. */
@@ -96,6 +119,12 @@ summary:focus-visible,
   .animate-pulse-slow {
     animation: none !important;
     opacity: 0.2;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none !important;
   }
 }
 

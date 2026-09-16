@@ -76,7 +76,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
         aria-modal="true"
         aria-labelledby="admin-login-title"
         tabIndex={-1}
-        className="relative w-full max-w-md bg-[#0d121f] border border-cyan-500/30 rounded-2xl shadow-2xl p-6 md:p-8 text-slate-100 overflow-hidden"
+        className="relative w-full max-w-md bg-[#0d121f] border border-cyan-500/30 rounded-2xl shadow-2xl p-6 md:p-8 text-slate-100 overflow-hidden animate-dialog-in"
       >
         {/* Glow accent background */}
         <div className="absolute -top-12 -right-12 w-32 h-32 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
