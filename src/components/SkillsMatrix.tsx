@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Server, Smartphone, Cpu, ShieldCheck, Sparkles } from 'lucide-react';
+import { Cpu, Sparkles } from 'lucide-react';
 import { SKILL_CATEGORIES } from '../data/portfolioData';
 import { useLanguage } from '../context/LanguageContext';
 import { Reveal } from './Reveal';
+import { CategoryIcon } from '../lib/categoryIcons';
 import type { SkillCategory } from '../types/portfolio';
 
 interface SkillsMatrixProps {
@@ -13,25 +14,14 @@ export const SkillsMatrix: React.FC<SkillsMatrixProps> = ({ categories = SKILL_C
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<string>('all');
 
-  const getIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Server':
-        return <Server className="w-5 h-5 text-amber-400" />;
-      case 'Smartphone':
-        return <Smartphone className="w-5 h-5 text-cyan-400" />;
-      case 'Cpu':
-        return <Cpu className="w-5 h-5 text-purple-400" />;
-      case 'ShieldCheck':
-        return <ShieldCheck className="w-5 h-5 text-emerald-400" />;
-      default:
-        return <Server className="w-5 h-5 text-amber-400" />;
-    }
-  };
-
+  // Categories without skills (e.g. just created in the admin panel) stay hidden.
+  const visibleCategories = categories.filter((cat) => cat.skills.length > 0);
+  // The selected category may disappear after an admin edit: fall back to all.
+  const selected = visibleCategories.some((cat) => cat.id === activeTab) ? activeTab : 'all';
   const filteredCategories =
-    activeTab === 'all'
-      ? categories
-      : categories.filter((cat) => cat.id === activeTab);
+    selected === 'all'
+      ? visibleCategories
+      : visibleCategories.filter((cat) => cat.id === selected);
 
   return (
     <section id="skills" className="py-20 relative bg-slate-950/50">
@@ -59,20 +49,22 @@ export const SkillsMatrix: React.FC<SkillsMatrixProps> = ({ categories = SKILL_C
             <div className="flex flex-wrap items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800">
               <button
                 onClick={() => setActiveTab('all')}
+                aria-pressed={selected === 'all'}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  activeTab === 'all'
+                  selected === 'all'
                     ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
                 {t({ es: 'Todas', en: 'All Categories' })}
               </button>
-              {SKILL_CATEGORIES.map((cat) => (
+              {visibleCategories.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setActiveTab(cat.id)}
+                  aria-pressed={selected === cat.id}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                    activeTab === cat.id
+                    selected === cat.id
                       ? 'bg-slate-800 text-amber-400 border border-amber-500/30 font-bold'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                   }`}
@@ -94,15 +86,17 @@ export const SkillsMatrix: React.FC<SkillsMatrixProps> = ({ categories = SKILL_C
                 {/* Category Header */}
                 <div className="flex items-center gap-3.5 mb-4 pb-4 border-b border-slate-800/80">
                   <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 group-hover:scale-105 transition-transform">
-                    {getIcon(cat.icon)}
+                    <CategoryIcon name={cat.icon} />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-white font-heading">
                       {t(cat.category)}
                     </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {t(cat.description)}
-                    </p>
+                    {t(cat.description) && (
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {t(cat.description)}
+                      </p>
+                    )}
                   </div>
                 </div>
 

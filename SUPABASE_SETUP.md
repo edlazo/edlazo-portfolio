@@ -127,9 +127,14 @@ eliminados, Best Practices de Lighthouse debería volver a 100.
 ## 3b. Actualización: guardado de skills con botón "Guardar cambios"
 
 El editor de skills del AdminPanel ya no escribe en cada acción: acumula los cambios
-(altas, ediciones, borrados y el orden por arrastre) y los envía todos juntos a la función
-`public.save_skills(changes jsonb)`, que los aplica en **una sola transacción** (si algo falla,
+(categorías y skills: altas, ediciones, borrados y orden) y los envía todos juntos a la función
+`public.save_skills(payload jsonb)`, que los aplica en **una sola transacción** (si algo falla,
 no se guarda nada). La función está en la sección 5 de `supabase_schema.sql`.
+
+> La versión anterior de la función se llamaba `save_skills(changes jsonb)` y no conocía las
+> categorías. El schema la reemplaza, así que **después de actualizar el sitio hay que volver a
+> correr `supabase_schema.sql`**; hasta entonces, guardar desde el panel muestra
+> "No se guardó nada en Supabase" (sin aplicar cambios a medias).
 
 Para crearla en una base que ya tiene datos:
 
@@ -140,7 +145,8 @@ Es seguro re-ejecutarlo: todo el script es idempotente y **no borra ni modifica 
 (verificado corriendo schema + seed + schema en Postgres). No hace falta volver a correr el seed.
 
 Si después de guardar desde el panel aparece "No se guardó nada en Supabase" y en la consola
-figura `PGRST202 Could not find the function public.save_skills`, la función todavía no existe
+figura `PGRST202 Could not find the function public.save_skills`
+(o `save_skills(payload) does not exist yet`), la función todavía no existe
 o el cache de PostgREST no se refrescó: ejecutá `NOTIFY pgrst, 'reload schema';`.
 
 ## 3c. Formulario de contacto (Supabase + email con Resend)

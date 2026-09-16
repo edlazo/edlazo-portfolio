@@ -134,18 +134,31 @@ GRANT SELECT ON public.profile, public.skill_categories, public.skills, public.p
 GRANT INSERT, UPDATE, DELETE ON public.profile, public.skill_categories, public.skills, public.projects TO authenticated;
 
 -- --------------------------------------------------------
--- 5. GUARDADO ATOMICO DE SKILLS (AdminPanel -> boton "Guardar cambios")
+-- 5. GUARDADO ATOMICO DE CATEGORIAS Y SKILLS (AdminPanel -> boton "Guardar cambios")
 --    Aplica todos los cambios pendientes en UNA transaccion: si cualquier paso
 --    falla, no se guarda nada. SECURITY INVOKER: corre con los permisos de quien
 --    llama, asi que las politicas RLS de arriba siguen aplicando.
 --
---    changes = {
+--    payload = {
+--      "categories": {
+--        "deleted":  ["<uuid>", ...],
+--        "updated":  [{"id", "category_es", "category_en", "description_es", "description_en", "icon", "sort_order"}, ...],
+--        "inserted": [{"key", "category_es", ...mismos campos}, ...]
+--      },
 --      "deleted":  ["<uuid>", ...],
 --      "updated":  [{"id", "category_id", "name", "level_es", "level_en", "is_primary", "sort_order"}, ...],
 --      "inserted": [{"category_id", "name", "level_es", "level_en", "is_primary", "sort_order"}, ...]
 --    }
+--
+--    En las skills, category_id puede ser el "key" temporal de una categoria
+--    creada en este mismo guardado.
+--    La version anterior se llamaba save_skills(changes jsonb) y no conocia las
+--    categorias: se reemplaza para que un sitio desactualizado falle en vez de
+--    ignorarlas en silencio.
 -- --------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.save_skills(changes jsonb)
+DROP FUNCTION IF EXISTS public.save_skills(jsonb);
+
+CREATE FUNCTION public.save_skills(payload jsonb)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -154,6 +167,8 @@ AS $fn$
 DECLARE
     item     jsonb;
     affected integer;
+    new_id   uuid;
+    new_ids  jsonb := '{}'::jsonb;  -- key temporal -> uuid de la categoria creada
 BEGIN
     -- RLS no da error cuando bloquea un UPDATE/DELETE (afecta 0 filas), asi que
     -- se exige sesion explicitamente y se controla cada fila afectada.
@@ -162,9 +177,9 @@ BEGIN
             USING ERRCODE = '42501';
     END IF;
 
-    -- 1) Borrados primero: permite borrar una skill y volver a crear otra con el
-    --    mismo nombre en la misma categoria dentro del mismo guardado.
-    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(changes->'deleted', '[]'::jsonb)) LOOP
+    -- 1) Skills borradas primero: permite borrar una skill y volver a crear otra
+    --    con el mismo nombre en la misma categoria dentro del mismo guardado.
+    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(payload->'deleted', '[]'::jsonb)) LOOP
         DELETE FROM public.skills WHERE id = (item #>> '{}')::uuid;
         GET DIAGNOSTICS affected = ROW_COUNT;
         IF affected = 0 THEN
@@ -173,10 +188,42 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- 2) Ediciones: nombre, nivel, destacada, categoria y posicion.
-    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(changes->'updated', '[]'::jsonb)) LOOP
+    -- 2) Categorias nuevas (antes que las skills que las usan).
+    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(payload#>'{categories,inserted}', '[]'::jsonb)) LOOP
+        INSERT INTO public.skill_categories (category_es, category_en, description_es, description_en, icon, sort_order)
+        VALUES (
+            item->>'category_es',
+            COALESCE(NULLIF(item->>'category_en', ''), item->>'category_es'),
+            COALESCE(item->>'description_es', ''),
+            COALESCE(item->>'description_en', ''),
+            COALESCE(NULLIF(item->>'icon', ''), 'Server'),
+            (item->>'sort_order')::integer
+        )
+        RETURNING id INTO new_id;
+        new_ids := new_ids || jsonb_build_object(item->>'key', new_id);
+    END LOOP;
+
+    -- 3) Categorias editadas: nombre, descripcion, icono y posicion.
+    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(payload#>'{categories,updated}', '[]'::jsonb)) LOOP
+        UPDATE public.skill_categories SET
+            category_es    = item->>'category_es',
+            category_en    = COALESCE(NULLIF(item->>'category_en', ''), item->>'category_es'),
+            description_es = COALESCE(item->>'description_es', ''),
+            description_en = COALESCE(item->>'description_en', ''),
+            icon           = COALESCE(NULLIF(item->>'icon', ''), 'Server'),
+            sort_order     = (item->>'sort_order')::integer
+        WHERE id = (item->>'id')::uuid;
+        GET DIAGNOSTICS affected = ROW_COUNT;
+        IF affected = 0 THEN
+            RAISE EXCEPTION 'save_skills: no se encontro la categoria a editar %', item->>'id'
+                USING ERRCODE = 'P0002';
+        END IF;
+    END LOOP;
+
+    -- 4) Skills editadas: nombre, nivel, destacada, categoria y posicion.
+    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(payload->'updated', '[]'::jsonb)) LOOP
         UPDATE public.skills SET
-            category_id = (item->>'category_id')::uuid,
+            category_id = COALESCE(new_ids->>(item->>'category_id'), item->>'category_id')::uuid,
             name        = item->>'name',
             level_es    = item->>'level_es',
             level_en    = item->>'level_en',
@@ -190,11 +237,24 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- 3) Altas.
+    -- 5) Skills nuevas.
     INSERT INTO public.skills (category_id, name, level_es, level_en, is_primary, sort_order)
-    SELECT x.category_id, x.name, x.level_es, x.level_en, COALESCE(x.is_primary, FALSE), x.sort_order
-    FROM jsonb_to_recordset(COALESCE(changes->'inserted', '[]'::jsonb))
-        AS x(category_id uuid, name text, level_es text, level_en text, is_primary boolean, sort_order integer);
+    SELECT COALESCE(new_ids->>x.category_id, x.category_id)::uuid, x.name, x.level_es, x.level_en,
+           COALESCE(x.is_primary, FALSE), x.sort_order
+    FROM jsonb_to_recordset(COALESCE(payload->'inserted', '[]'::jsonb))
+        AS x(category_id text, name text, level_es text, level_en text, is_primary boolean, sort_order integer);
+
+    -- 6) Categorias borradas al final: si una skill se movio a otra categoria en
+    --    este guardado ya no esta ahi, y el ON DELETE CASCADE solo se lleva las
+    --    que quedaban.
+    FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(payload#>'{categories,deleted}', '[]'::jsonb)) LOOP
+        DELETE FROM public.skill_categories WHERE id = (item #>> '{}')::uuid;
+        GET DIAGNOSTICS affected = ROW_COUNT;
+        IF affected = 0 THEN
+            RAISE EXCEPTION 'save_skills: no se encontro la categoria a borrar %', item #>> '{}'
+                USING ERRCODE = 'P0002';
+        END IF;
+    END LOOP;
 END;
 $fn$;
 

@@ -12,6 +12,8 @@ export interface SkillItem {
 
 export interface SkillCategory {
   id: string;
+  /** Stored sort_order, used to normalize gaps when the category list is saved. */
+  sortOrder?: number;
   category: { es: string; en: string };
   description: { es: string; en: string };
   icon: string;

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { SkillCategory, Project } from '../types/portfolio';
-import type { SkillChanges } from './skillChanges';
+import { isNewCategoryId, type SkillChanges } from './skillChanges';
 
 export interface DbProfile {
   id?: string;
@@ -86,6 +86,7 @@ export async function fetchSkillsFromSupabase(): Promise<SkillCategory[] | null>
 
     const formatted: SkillCategory[] = categories.map((cat: any) => ({
       id: cat.id,
+      sortOrder: cat.sort_order,
       category: {
         es: cat.category_es,
         en: cat.category_en,
@@ -113,28 +114,35 @@ export async function fetchSkillsFromSupabase(): Promise<SkillCategory[] | null>
   }
 }
 
-// Sends every pending skill change in one call to the `save_skills` database
-// function, which applies them in a single transaction (all or nothing).
+// Sends every pending category and skill change in one call to the
+// `save_skills` database function, which applies them in a single transaction
+// (all or nothing).
 export async function saveSkillChangesToSupabase(changes: SkillChanges): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
     // The local fallback data uses readable category ids ('backend'); the
-    // database function expects UUIDs.
+    // database function expects UUIDs. Categories created in this same save
+    // keep their temporary id, which the function maps to the new row.
     const categoryIds = new Map<string, string | null>();
-    for (const row of [...changes.updated, ...changes.inserted]) {
-      if (!categoryIds.has(row.category_id)) {
-        categoryIds.set(row.category_id, await resolveCategoryId(row.category_id));
-      }
-    }
+    const resolve = async (id: string) => {
+      if (isNewCategoryId(id)) return;
+      if (!categoryIds.has(id)) categoryIds.set(id, await resolveCategoryId(id));
+    };
+    for (const row of [...changes.updated, ...changes.inserted]) await resolve(row.category_id);
+    for (const row of changes.categories.updated) await resolve(row.id);
+    for (const id of changes.categories.deleted) await resolve(id);
     if ([...categoryIds.values()].some((id) => !id)) return false;
-    const withUuid = <T extends { category_id: string }>(row: T): T => ({
-      ...row,
-      category_id: categoryIds.get(row.category_id) as string,
-    });
+    const uuidOf = (id: string) => (isNewCategoryId(id) ? id : (categoryIds.get(id) as string));
+    const withUuid = <T extends { category_id: string }>(row: T): T => ({ ...row, category_id: uuidOf(row.category_id) });
 
     const { error } = await supabase.rpc('save_skills', {
-      changes: {
+      payload: {
+        categories: {
+          deleted: changes.categories.deleted.map(uuidOf),
+          updated: changes.categories.updated.map((row) => ({ ...row, id: uuidOf(row.id) })),
+          inserted: changes.categories.inserted,
+        },
         deleted: changes.deleted,
         updated: changes.updated.map(withUuid),
         inserted: changes.inserted.map(withUuid),
@@ -142,6 +150,9 @@ export async function saveSkillChangesToSupabase(changes: SkillChanges): Promise
     });
 
     if (error) {
+      if (error.code === 'PGRST202') {
+        console.error('save_skills(payload) does not exist yet: run the latest supabase_schema.sql in the Supabase SQL editor.');
+      }
       console.error('Error saving skills in Supabase (nothing was applied):', error);
       return false;
     }

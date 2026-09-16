@@ -1,10 +1,10 @@
 import type { SkillCategory, SkillItem } from '../types/portfolio';
 
 // ----------------------------------------------------------------------
-// Draft model for the admin skills editor. Edits, deletions and reordering
-// are applied to a local draft and only sent to Supabase when the admin
-// presses "Guardar cambios". This module compares the baseline (what was
-// loaded) with the draft and builds the payload expected by the
+// Draft model for the admin skills editor. Categories and skills are edited,
+// deleted and reordered in a local draft and only sent to Supabase when the
+// admin presses "Guardar cambios". This module compares the baseline (what
+// was loaded) with the draft and builds the payload expected by the
 // `save_skills` database function.
 // ----------------------------------------------------------------------
 
@@ -18,6 +18,7 @@ export interface DraftCategory extends Omit<SkillCategory, 'skills'> {
 }
 
 export interface SkillRow {
+  /** A category id, or the temporary id of a category created in the same save. */
   category_id: string;
   name: string;
   level_es: string;
@@ -26,7 +27,22 @@ export interface SkillRow {
   sort_order: number;
 }
 
+export interface CategoryRow {
+  category_es: string;
+  category_en: string;
+  description_es: string;
+  description_en: string;
+  icon: string;
+  sort_order: number;
+}
+
 export interface SkillChanges {
+  categories: {
+    deleted: string[];
+    updated: (CategoryRow & { id: string })[];
+    /** `key` is the temporary id the new category's skills refer to. */
+    inserted: (CategoryRow & { key: string })[];
+  };
   deleted: string[];
   updated: (SkillRow & { id: string })[];
   inserted: SkillRow[];
@@ -36,12 +52,21 @@ export interface SkillChangeSummary {
   added: number;
   edited: number;
   deleted: number;
-  /** Number of categories whose order changed. */
+  /** Number of categories whose skill order changed. */
   reordered: number;
+  categoriesAdded: number;
+  categoriesEdited: number;
+  categoriesDeleted: number;
+  /** 1 when the order of the categories changed. */
+  categoriesReordered: number;
 }
 
 let tempCounter = 0;
 export const newSkillKey = () => `new-${Date.now()}-${++tempCounter}`;
+
+const NEW_CATEGORY_PREFIX = 'new-cat-';
+export const newCategoryId = () => `${NEW_CATEGORY_PREFIX}${Date.now()}-${++tempCounter}`;
+export const isNewCategoryId = (id: string) => id.startsWith(NEW_CATEGORY_PREFIX);
 
 export function toDraft(categories: SkillCategory[]): DraftCategory[] {
   return categories.map((cat) => ({
@@ -76,6 +101,16 @@ export function isSkillEdited(before: SkillItem, beforeCategoryId: string, after
   );
 }
 
+export function isCategoryEdited(before: Omit<SkillCategory, 'skills'>, after: Omit<SkillCategory, 'skills'>) {
+  return (
+    before.category.es !== after.category.es ||
+    before.category.en !== after.category.en ||
+    (before.description.es || '') !== (after.description.es || '') ||
+    (before.description.en || '') !== (after.description.en || '') ||
+    before.icon !== after.icon
+  );
+}
+
 const toRow = (categoryId: string, skill: SkillItem, sortOrder: number): SkillRow => {
   const [level_es, level_en] = splitLevel(skill.level);
   return {
@@ -88,6 +123,54 @@ const toRow = (categoryId: string, skill: SkillItem, sortOrder: number): SkillRo
   };
 };
 
+const toCategoryRow = (cat: Omit<SkillCategory, 'skills'>, sortOrder: number): CategoryRow => ({
+  category_es: cat.category.es,
+  category_en: cat.category.en || cat.category.es,
+  description_es: cat.description.es || '',
+  description_en: cat.description.en || cat.description.es || '',
+  icon: cat.icon,
+  sort_order: sortOrder,
+});
+
+function diffCategories(baseline: DraftCategory[], draft: DraftCategory[], changes: SkillChanges, summary: SkillChangeSummary) {
+  const original = new Map(baseline.map((cat, index) => [cat.id, { cat, position: index + 1 }]));
+  const draftIds = new Set(draft.map((cat) => cat.id));
+
+  const keptOrder = baseline.map((cat) => cat.id).filter((id) => draftIds.has(id));
+  const draftOrder = draft.map((cat) => cat.id).filter((id) => original.has(id));
+  if (keptOrder.join('|') !== draftOrder.join('|')) summary.categoriesReordered = 1;
+
+  const listChanged =
+    summary.categoriesReordered > 0 || draft.length !== keptOrder.length || baseline.length !== keptOrder.length;
+
+  draft.forEach((cat, index) => {
+    const sortOrder = index + 1;
+    const row = toCategoryRow(cat, sortOrder);
+    const before = original.get(cat.id);
+
+    if (!before) {
+      changes.categories.inserted.push({ key: cat.id, ...row });
+      summary.categoriesAdded++;
+      return;
+    }
+
+    const edited = isCategoryEdited(before.cat, cat);
+    if (edited) summary.categoriesEdited++;
+    // Same rule as skills: positions are only rewritten (as 1..n) when the list
+    // itself changed, and only for the categories whose position differs.
+    const positionChanged =
+      listChanged && (before.position !== sortOrder || (cat.sortOrder !== undefined && cat.sortOrder !== sortOrder));
+    if (edited || positionChanged) changes.categories.updated.push({ id: cat.id, ...row });
+  });
+
+  for (const [id] of original) {
+    if (!draftIds.has(id)) {
+      summary.categoriesDeleted++;
+      changes.categories.deleted.push(id);
+    }
+  }
+}
+
 export function diffSkills(
   baseline: DraftCategory[],
   draft: DraftCategory[]
@@ -98,8 +181,24 @@ export function diffSkills(
   }
   const draftKeys = new Set(draft.flatMap((cat) => cat.skills.map((s) => s.key)));
 
-  const changes: SkillChanges = { deleted: [], updated: [], inserted: [] };
-  const summary: SkillChangeSummary = { added: 0, edited: 0, deleted: 0, reordered: 0 };
+  const changes: SkillChanges = {
+    categories: { deleted: [], updated: [], inserted: [] },
+    deleted: [],
+    updated: [],
+    inserted: [],
+  };
+  const summary: SkillChangeSummary = {
+    added: 0,
+    edited: 0,
+    deleted: 0,
+    reordered: 0,
+    categoriesAdded: 0,
+    categoriesEdited: 0,
+    categoriesDeleted: 0,
+    categoriesReordered: 0,
+  };
+
+  diffCategories(baseline, draft, changes, summary);
 
   for (const cat of draft) {
     const baseSkills = baseline.find((c) => c.id === cat.id)?.skills ?? [];
@@ -156,5 +255,5 @@ export function diffSkills(
   return { changes, summary };
 }
 
-export const hasSummaryChanges = ({ added, edited, deleted, reordered }: SkillChangeSummary) =>
-  added + edited + deleted + reordered > 0;
+export const hasSummaryChanges = (summary: SkillChangeSummary) =>
+  Object.values(summary).some((count) => count > 0);

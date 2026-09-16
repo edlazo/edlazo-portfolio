@@ -19,15 +19,18 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Loader2, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, FolderPlus, GripVertical, Loader2, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { saveSkillChangesToSupabase } from '../lib/supabaseService';
+import { CATEGORY_ICONS, CategoryIcon, DEFAULT_CATEGORY_ICON } from '../lib/categoryIcons';
 import {
   diffSkills,
   fromDraft,
   hasSummaryChanges,
+  isCategoryEdited,
   isSkillEdited,
+  newCategoryId,
   newSkillKey,
   toDraft,
   type DraftCategory,
@@ -47,6 +50,29 @@ const collisionDetection: CollisionDetection = (args) => {
   return underPointer.length > 0 ? underPointer : closestCorners(args);
 };
 const DEFAULT_LEVEL = LEVELS[1];
+
+interface CategoryForm {
+  /** null while creating a new category. */
+  id: string | null;
+  nameEs: string;
+  nameEn: string;
+  descriptionEs: string;
+  descriptionEn: string;
+  icon: string;
+  error: string | null;
+}
+
+const EMPTY_CATEGORY_FORM: CategoryForm = {
+  id: null,
+  nameEs: '',
+  nameEn: '',
+  descriptionEs: '',
+  descriptionEn: '',
+  icon: DEFAULT_CATEGORY_ICON,
+  error: null,
+};
+
+const inputClass = 'w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200';
 
 interface SkillsEditorProps {
   skillCategories: SkillCategory[];
@@ -157,6 +183,8 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
   const [level, setLevel] = useState(DEFAULT_LEVEL);
   const [isPrimary, setIsPrimary] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [categoryForm, setCategoryForm] = useState<CategoryForm | null>(null);
+  const categoryFormRef = useRef<HTMLDivElement>(null);
 
   const { changes, summary } = useMemo(() => diffSkills(baseline, draft), [baseline, draft]);
   const dirty = hasSummaryChanges(summary);
@@ -196,6 +224,12 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
     return map;
   }, [baseline]);
 
+  const categoryState = (cat: DraftCategory): 'new' | 'edited' | null => {
+    const before = baseline.find((c) => c.id === cat.id);
+    if (!before) return 'new';
+    return isCategoryEdited(before, cat) ? 'edited' : null;
+  };
+
   const chipState = (catId: string, skill: DraftSkill): 'new' | 'edited' | null => {
     const before = baselineByKey.get(skill.key);
     if (!before) return 'new';
@@ -223,7 +257,7 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
   const handleSubmitForm = (e: React.FormEvent) => {
     e.preventDefault();
     const name = skillName.trim();
-    if (!name) return;
+    if (!name || !draft.some((cat) => cat.id === categoryId)) return;
 
     const duplicate = draft
       .find((cat) => cat.id === categoryId)
@@ -261,6 +295,98 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
       current.map((cat) => (cat.id === catId ? { ...cat, skills: cat.skills.filter((s) => s.key !== key) } : cat))
     );
     if (editingKey === key) resetForm();
+  };
+
+  // ------------------------------------------------------------------ categories
+  const openCategoryForm = (form: CategoryForm) => {
+    setCategoryForm(form);
+    requestAnimationFrame(() => {
+      categoryFormRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      document.getElementById('category-name-es')?.focus();
+    });
+  };
+
+  const startEditCategory = (cat: DraftCategory) =>
+    openCategoryForm({
+      id: cat.id,
+      nameEs: cat.category.es,
+      nameEn: cat.category.en === cat.category.es ? '' : cat.category.en,
+      descriptionEs: cat.description.es || '',
+      descriptionEn: cat.description.en === cat.description.es ? '' : cat.description.en || '',
+      icon: CATEGORY_ICONS.some((icon) => icon.name === cat.icon) ? cat.icon : DEFAULT_CATEGORY_ICON,
+      error: null,
+    });
+
+  const updateCategoryForm = (patch: Partial<CategoryForm>) =>
+    setCategoryForm((current) => (current ? { ...current, ...patch, error: null } : current));
+
+  const handleSubmitCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryForm) return;
+    const nameEs = categoryForm.nameEs.trim();
+    const nameEn = categoryForm.nameEn.trim() || nameEs;
+    const descriptionEs = categoryForm.descriptionEs.trim();
+    const descriptionEn = categoryForm.descriptionEn.trim() || descriptionEs;
+    if (!nameEs) return;
+
+    const taken = (n: string) => [nameEs, nameEn].some((m) => n.toLowerCase() === m.toLowerCase());
+    const duplicate = draft.some((cat) => cat.id !== categoryForm.id && (taken(cat.category.es) || taken(cat.category.en)));
+    if (duplicate) {
+      setCategoryForm({
+        ...categoryForm,
+        error: t({ es: `Ya existe una categoría llamada "${nameEs}".`, en: `A category named "${nameEs}" already exists.` }),
+      });
+      return;
+    }
+
+    const fields = {
+      category: { es: nameEs, en: nameEn },
+      description: { es: descriptionEs, en: descriptionEn },
+      icon: categoryForm.icon,
+    };
+
+    if (categoryForm.id) {
+      const id = categoryForm.id;
+      setDraft((current) => current.map((cat) => (cat.id === id ? { ...cat, ...fields } : cat)));
+    } else {
+      const id = newCategoryId();
+      setDraft((current) => [...current, { id, ...fields, skills: [] }]);
+      // Ready to add skills to it right away.
+      setCategoryId(id);
+    }
+    setCategoryForm(null);
+  };
+
+  const moveCategory = (id: string, direction: -1 | 1) => {
+    const from = draft.findIndex((cat) => cat.id === id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= draft.length) return;
+    setDraft((current) => arrayMove(current, from, to));
+    // Keep keyboard focus on the moved category. At either end the pressed
+    // button gets disabled, so focus moves to the other arrow.
+    requestAnimationFrame(() => {
+      const same = document.getElementById(`category-${direction < 0 ? 'up' : 'down'}-${id}`) as HTMLButtonElement | null;
+      const other = document.getElementById(`category-${direction < 0 ? 'down' : 'up'}-${id}`);
+      (same && !same.disabled ? same : other)?.focus();
+    });
+  };
+
+  const handleDeleteCategory = (cat: DraftCategory) => {
+    if (draft.length <= 1) return;
+    const name = t(cat.category);
+    const count = cat.skills.length;
+    const confirmed =
+      count === 0 ||
+      window.confirm(
+        t({
+          es: `¿Borrar la categoría "${name}" y sus ${count} ${count === 1 ? 'skill' : 'skills'}? Se aplica al guardar los cambios.`,
+          en: `Delete the "${name}" category and its ${count} ${count === 1 ? 'skill' : 'skills'}? It's applied when you save.`,
+        })
+      );
+    if (!confirmed) return;
+    setDraft((current) => current.filter((c) => c.id !== cat.id));
+    if (editingKey && cat.skills.some((s) => s.key === editingKey)) resetForm();
+    if (categoryForm?.id === cat.id) setCategoryForm(null);
   };
 
   // ------------------------------------------------------------------ drag & drop
@@ -318,6 +444,7 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
   const handleDiscard = () => {
     setDraft(baseline);
     resetForm();
+    setCategoryForm(null);
   };
 
   const handleSave = async () => {
@@ -345,6 +472,7 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
     }
 
     resetForm();
+    setCategoryForm(null);
     setIsSaving(false);
     showStatus(
       isSupabaseConfigured
@@ -357,14 +485,18 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
     const parts: string[] = [];
     const plural = (n: number, es: [string, string], en: [string, string]) =>
       `${n} ${language === 'es' ? es[n === 1 ? 0 : 1] : en[n === 1 ? 0 : 1]}`;
-    if (s.added) parts.push(plural(s.added, ['agregada', 'agregadas'], ['added', 'added']));
-    if (s.edited) parts.push(plural(s.edited, ['editada', 'editadas'], ['edited', 'edited']));
-    if (s.deleted) parts.push(plural(s.deleted, ['borrada', 'borradas'], ['removed', 'removed']));
+    if (s.categoriesAdded) parts.push(plural(s.categoriesAdded, ['categoría nueva', 'categorías nuevas'], ['category added', 'categories added']));
+    if (s.categoriesEdited) parts.push(plural(s.categoriesEdited, ['categoría editada', 'categorías editadas'], ['category edited', 'categories edited']));
+    if (s.categoriesDeleted) parts.push(plural(s.categoriesDeleted, ['categoría borrada', 'categorías borradas'], ['category removed', 'categories removed']));
+    if (s.categoriesReordered) parts.push(t({ es: 'orden de categorías cambiado', en: 'category order changed' }));
+    if (s.added) parts.push(plural(s.added, ['skill agregada', 'skills agregadas'], ['skill added', 'skills added']));
+    if (s.edited) parts.push(plural(s.edited, ['skill editada', 'skills editadas'], ['skill edited', 'skills edited']));
+    if (s.deleted) parts.push(plural(s.deleted, ['skill borrada', 'skills borradas'], ['skill removed', 'skills removed']));
     if (s.reordered)
       parts.push(
         language === 'es'
-          ? `orden cambiado en ${s.reordered} ${s.reordered === 1 ? 'categoría' : 'categorías'}`
-          : `order changed in ${s.reordered} ${s.reordered === 1 ? 'category' : 'categories'}`
+          ? `orden de skills cambiado en ${s.reordered} ${s.reordered === 1 ? 'categoría' : 'categorías'}`
+          : `skill order changed in ${s.reordered} ${s.reordered === 1 ? 'category' : 'categories'}`
       );
     return parts.join(' · ');
   };
@@ -399,7 +531,7 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
               id="skill-category"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200"
+              className={inputClass}
             >
               {draft.map((cat) => (
                 <option key={cat.id} value={cat.id}>
@@ -478,21 +610,216 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
         </form>
       </div>
 
-      <p className="text-xs text-slate-400 flex items-center gap-1.5">
-        <GripVertical className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-        {t({
-          es: 'Arrastrá desde el ícono para reordenar. Nada se guarda hasta que toques "Guardar cambios".',
-          en: 'Drag from the handle to reorder. Nothing is saved until you press "Save changes".',
-        })}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-slate-400 flex items-center gap-1.5">
+          <GripVertical className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          {t({
+            es: 'Arrastrá desde el ícono para reordenar. Nada se guarda hasta que toques "Guardar cambios".',
+            en: 'Drag from the handle to reorder. Nothing is saved until you press "Save changes".',
+          })}
+        </p>
+        {!categoryForm && (
+          <button
+            type="button"
+            onClick={() => openCategoryForm(EMPTY_CATEGORY_FORM)}
+            className="px-3 py-2 rounded-lg text-xs font-semibold text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/10 flex items-center gap-1.5"
+          >
+            <FolderPlus className="w-4 h-4" aria-hidden="true" />
+            {t({ es: 'Nueva categoría', en: 'New category' })}
+          </button>
+        )}
+      </div>
+
+      {categoryForm && (
+        <div ref={categoryFormRef} className="p-4 bg-slate-900/60 border border-cyan-500/30 rounded-xl space-y-4">
+          <h3 className="text-sm font-semibold text-cyan-400 flex items-center gap-2">
+            {categoryForm.id ? <Pencil className="w-4 h-4" aria-hidden="true" /> : <FolderPlus className="w-4 h-4" aria-hidden="true" />}
+            {categoryForm.id
+              ? t({ es: 'Editar categoría', en: 'Edit category' })
+              : t({ es: 'Nueva categoría', en: 'New category' })}
+          </h3>
+
+          <form onSubmit={handleSubmitCategory} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="category-name-es" className="block text-xs text-slate-400 mb-1">
+                  {t({ es: 'Nombre (español)', en: 'Name (Spanish)' })}
+                </label>
+                <input
+                  id="category-name-es"
+                  type="text"
+                  required
+                  maxLength={60}
+                  value={categoryForm.nameEs}
+                  onChange={(e) => updateCategoryForm({ nameEs: e.target.value })}
+                  placeholder="Ej: Bases de Datos"
+                  aria-invalid={Boolean(categoryForm.error)}
+                  aria-describedby={categoryForm.error ? 'category-form-error' : undefined}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="category-name-en" className="block text-xs text-slate-400 mb-1">
+                  {t({ es: 'Nombre (inglés, opcional)', en: 'Name (English, optional)' })}
+                </label>
+                <input
+                  id="category-name-en"
+                  type="text"
+                  maxLength={60}
+                  value={categoryForm.nameEn}
+                  onChange={(e) => updateCategoryForm({ nameEn: e.target.value })}
+                  placeholder="Ej: Databases"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="category-description-es" className="block text-xs text-slate-400 mb-1">
+                  {t({ es: 'Descripción (español, opcional)', en: 'Description (Spanish, optional)' })}
+                </label>
+                <input
+                  id="category-description-es"
+                  type="text"
+                  maxLength={160}
+                  value={categoryForm.descriptionEs}
+                  onChange={(e) => updateCategoryForm({ descriptionEs: e.target.value })}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="category-description-en" className="block text-xs text-slate-400 mb-1">
+                  {t({ es: 'Descripción (inglés, opcional)', en: 'Description (English, optional)' })}
+                </label>
+                <input
+                  id="category-description-en"
+                  type="text"
+                  maxLength={160}
+                  value={categoryForm.descriptionEn}
+                  onChange={(e) => updateCategoryForm({ descriptionEn: e.target.value })}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {t({
+                es: 'Si dejás vacío el inglés, se usa el texto en español.',
+                en: 'If English is left empty, the Spanish text is used.',
+              })}
+            </p>
+
+            <fieldset>
+              <legend className="block text-xs text-slate-400 mb-1.5">{t({ es: 'Ícono', en: 'Icon' })}</legend>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORY_ICONS.map((icon) => (
+                  <label key={icon.name} className="cursor-pointer" title={t(icon.label)}>
+                    <input
+                      type="radio"
+                      name="category-icon"
+                      value={icon.name}
+                      checked={categoryForm.icon === icon.name}
+                      onChange={() => updateCategoryForm({ icon: icon.name })}
+                      className="peer sr-only"
+                    />
+                    <span className="flex p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-slate-600 peer-checked:border-cyan-400 peer-checked:bg-cyan-500/10 peer-focus-visible:ring-2 peer-focus-visible:ring-cyan-400">
+                      <CategoryIcon name={icon.name} className="w-4 h-4" />
+                      <span className="sr-only">{t(icon.label)}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            {categoryForm.error && (
+              <p id="category-form-error" role="alert" className="text-xs text-rose-300">
+                {categoryForm.error}
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                className="flex-1 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+              >
+                {categoryForm.id ? <Pencil className="w-4 h-4" aria-hidden="true" /> : <Plus className="w-4 h-4" aria-hidden="true" />}
+                {categoryForm.id
+                  ? t({ es: 'Aplicar cambios a la categoría', en: 'Apply category changes' })
+                  : t({ es: 'Crear categoría', en: 'Create category' })}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryForm(null)}
+                className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-300 border border-slate-700 hover:bg-slate-800"
+              >
+                {t({ es: 'Cancelar', en: 'Cancel' })}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Skills per category (sortable) */}
       <div className="space-y-4">
-        {draft.map((cat) => (
-          <section key={cat.id} className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-3" aria-labelledby={`skills-cat-${cat.id}`}>
-            <h4 id={`skills-cat-${cat.id}`} className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              {t(cat.category)} ({cat.skills.length})
-            </h4>
+        {draft.map((cat, index) => {
+          const state = categoryState(cat);
+          const name = t(cat.category);
+          return (
+          <section
+            key={cat.id}
+            className={`p-4 bg-slate-900/40 border rounded-xl space-y-3 ${
+              categoryForm?.id === cat.id ? 'border-cyan-400/60' : state ? 'border-amber-500/40' : 'border-slate-800/80'
+            }`}
+            aria-labelledby={`skills-cat-${cat.id}`}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <CategoryIcon name={cat.icon} className="w-4 h-4 shrink-0" />
+              <h4 id={`skills-cat-${cat.id}`} className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                {name} ({cat.skills.length})
+              </h4>
+              {state && (
+                <span className="text-[10px] font-semibold text-amber-400">
+                  {state === 'new' ? t({ es: 'nueva', en: 'new' }) : t({ es: 'editada', en: 'edited' })}
+                </span>
+              )}
+              <div className="ml-auto flex items-center gap-0.5">
+                <button
+                  id={`category-up-${cat.id}`}
+                  type="button"
+                  onClick={() => moveCategory(cat.id, -1)}
+                  disabled={index === 0}
+                  className="p-1.5 rounded text-slate-400 hover:text-cyan-400 disabled:opacity-30 disabled:hover:text-slate-400"
+                  aria-label={t({ es: `Subir categoría ${name}`, en: `Move ${name} category up` })}
+                >
+                  <ChevronUp className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <button
+                  id={`category-down-${cat.id}`}
+                  type="button"
+                  onClick={() => moveCategory(cat.id, 1)}
+                  disabled={index === draft.length - 1}
+                  className="p-1.5 rounded text-slate-400 hover:text-cyan-400 disabled:opacity-30 disabled:hover:text-slate-400"
+                  aria-label={t({ es: `Bajar categoría ${name}`, en: `Move ${name} category down` })}
+                >
+                  <ChevronDown className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startEditCategory(cat)}
+                  className="p-1.5 rounded text-slate-400 hover:text-amber-400"
+                  aria-label={t({ es: `Editar categoría ${name}`, en: `Edit ${name} category` })}
+                >
+                  <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCategory(cat)}
+                  disabled={draft.length <= 1}
+                  title={draft.length <= 1 ? t({ es: 'Tiene que quedar al menos una categoría', en: 'At least one category must remain' }) : undefined}
+                  className="p-1.5 rounded text-slate-400 hover:text-rose-400 disabled:opacity-30 disabled:hover:text-slate-400"
+                  aria-label={t({ es: `Borrar categoría ${name}`, en: `Delete ${name} category` })}
+                >
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
             <DndContext
               sensors={sensors}
               collisionDetection={collisionDetection}
@@ -515,10 +842,16 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
               </SortableContext>
             </DndContext>
             {cat.skills.length === 0 && (
-              <p className="text-xs text-slate-400">{t({ es: 'Sin skills.', en: 'No skills.' })}</p>
+              <p className="text-xs text-slate-400">
+                {t({
+                  es: 'Sin skills. Las categorías vacías no se muestran en el sitio.',
+                  en: 'No skills. Empty categories are hidden on the site.',
+                })}
+              </p>
             )}
           </section>
-        ))}
+          );
+        })}
       </div>
 
       {/* Save bar */}
