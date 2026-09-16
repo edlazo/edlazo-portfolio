@@ -40,7 +40,7 @@ export const Projects: React.FC<ProjectsProps> = ({ onSelectProject, projects = 
         <div className="space-y-12">
           {projects.map((project, idx) => {
             const isEven = idx % 2 === 0;
-            const isMobileApp = project.id === 'semanita';
+            const isMobileApp = Boolean(project.isMobileApp);
 
             return (
               <Reveal key={project.id}>

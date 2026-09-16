@@ -16,7 +16,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
 
   if (!project) return null;
 
-  const isMobileApp = project.id === 'semanita';
+  const isMobileApp = Boolean(project.isMobileApp);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 lg:p-8">
@@ -41,7 +41,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono">
-                {project.id === 'semanita' ? 'Mobile AI Architecture' : 'Async Backend Core'}
+                {isMobileApp ? 'Mobile AI Architecture' : 'Async Backend Core'}
               </span>
               <span className="text-xs font-mono text-slate-400">
                 {project.period}

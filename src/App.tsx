@@ -78,10 +78,25 @@ export function AppContent() {
   }, [handleUpdateSkills, handleUpdateProjects]);
 
   useEffect(() => {
-    const adminState = localStorage.getItem('elias_is_admin') === 'true';
-    setIsAdmin(adminState);
     refreshFromSupabase();
   }, [refreshFromSupabase]);
+
+  // Admin mode follows the real Supabase Auth session, not a local flag: the
+  // write policies only accept an authenticated session, so showing the panel
+  // without one would let every change fail silently. This also picks up token
+  // refreshes, expirations and sign-outs from other tabs.
+  useEffect(() => {
+    // Legacy flag from the previous implementation; it no longer means anything.
+    localStorage.removeItem('elias_is_admin');
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data }) => setIsAdmin(Boolean(data.session)));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAdmin(Boolean(session));
+      if (!session) setIsAdminPanelOpen(false);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   // The browser tries to jump to a URL fragment (e.g. /#projects from the 404
   // page or a shared link) before React has rendered the section, so retry once
@@ -117,7 +132,6 @@ export function AppContent() {
     if (supabase) {
       await supabase.auth.signOut();
     }
-    localStorage.removeItem('elias_is_admin');
     setIsAdmin(false);
     setIsAdminPanelOpen(false);
   };

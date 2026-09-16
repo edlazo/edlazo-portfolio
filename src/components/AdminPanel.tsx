@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { X, Plus, Trash2, LogOut, Check, Sparkles, FolderGit2, Cpu, User, Loader2, Save, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Plus, Trash2, LogOut, Check, AlertCircle, Sparkles, FolderGit2, Cpu, User, Loader2, Save, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import type { SkillCategory, Project, SkillItem } from '../types/portfolio';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -7,6 +7,7 @@ import {
   saveSkillToSupabase,
   updateSkillInSupabase,
   deleteSkillFromSupabase,
+  reorderSkillsInSupabase,
   upsertProjectToSupabase,
   deleteProjectFromSupabase,
   saveProfileToSupabase,
@@ -40,8 +41,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Loading & notification state
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Skill state
   const [editingSkillOldName, setEditingSkillOldName] = useState<string | null>(null);
@@ -84,13 +85,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // All hooks must run before this early return (Rules of Hooks).
   if (!isOpen) return null;
 
-  const triggerSuccess = (msg?: string) => {
-    setStatusMessage(msg || (language === 'es' ? '¡Cambios guardados correctamente!' : 'Changes saved successfully!'));
-    setSaveSuccess(true);
-    setTimeout(() => {
-      setSaveSuccess(false);
-      setStatusMessage(null);
-    }, 3000);
+  const showStatus = (message: string, type: 'success' | 'error' = 'success') => {
+    if (statusTimer.current) clearTimeout(statusTimer.current);
+    setStatus({ type, message });
+    statusTimer.current = setTimeout(() => setStatus(null), type === 'error' ? 7000 : 3000);
+  };
+
+  // With Supabase configured the database is the source of truth: a change is
+  // only applied to the panel after it was written, so nothing is shown that
+  // the site would lose on the next reload. On failure the form keeps its
+  // values so the change can be retried.
+  const showDbError = () => {
+    setIsSaving(false);
+    showStatus(
+      language === 'es'
+        ? 'No se guardó en Supabase. Si tu sesión venció, cerrá sesión y volvé a entrar. Detalle en la consola.'
+        : "Not saved to Supabase. If your session expired, log out and back in. Details in the console.",
+      'error'
+    );
   };
 
   // ----------------------------------------------------------------------
@@ -119,97 +131,86 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setIsSaving(true);
     const skillObj = { name: newSkillName.trim(), level: newSkillLevel, isPrimary };
+    const isEditing = Boolean(editingSkillOldName);
 
-    let dbSuccess = false;
-    if (editingSkillOldName) {
-      // Edit existing skill
-      if (isSupabaseConfigured) {
-        dbSuccess = await updateSkillInSupabase(
-          editingSkillOldName,
-          editingSkillOldCatId || selectedCatId,
-          selectedCatId,
-          skillObj
-        );
-      }
-
-      const updated = skillCategories.map((cat) => {
+    let updated: SkillCategory[];
+    if (isEditing) {
+      updated = skillCategories.map((cat) => {
         // remove old skill from whichever category it was in
         const filteredSkills = cat.skills.filter((s) => s.name !== editingSkillOldName);
         if (cat.id === selectedCatId) {
-          return {
-            ...cat,
-            skills: [...filteredSkills, skillObj],
-          };
+          return { ...cat, skills: [...filteredSkills, skillObj] };
         }
         return { ...cat, skills: filteredSkills };
       });
-      onUpdateSkills(updated);
-      setEditingSkillOldName(null);
-      setEditingSkillOldCatId(null);
     } else {
-      // Create new skill
-      if (isSupabaseConfigured) {
-        dbSuccess = await saveSkillToSupabase(selectedCatId, skillObj);
-      }
-
-      const updated = skillCategories.map((cat) => {
-        if (cat.id === selectedCatId) {
-          return {
-            ...cat,
-            skills: [...cat.skills, skillObj],
-          };
-        }
-        return cat;
-      });
-      onUpdateSkills(updated);
+      updated = skillCategories.map((cat) =>
+        cat.id === selectedCatId ? { ...cat, skills: [...cat.skills, skillObj] } : cat
+      );
     }
 
-    if (dbSuccess) await onReloadFromDb?.();
+    if (isSupabaseConfigured) {
+      const targetCategory = skillCategories.find((cat) => cat.id === selectedCatId);
+      const ok = isEditing
+        ? await updateSkillInSupabase(
+            editingSkillOldName as string,
+            editingSkillOldCatId || selectedCatId,
+            selectedCatId,
+            skillObj
+          )
+        : await saveSkillToSupabase(selectedCatId, skillObj, (targetCategory?.skills.length ?? 0) + 1);
+      if (!ok) return showDbError();
+    }
+
+    onUpdateSkills(updated);
+    if (isEditing) {
+      setEditingSkillOldName(null);
+      setEditingSkillOldCatId(null);
+    }
+    if (isSupabaseConfigured) await onReloadFromDb?.();
 
     setNewSkillName('');
     setIsSaving(false);
-    triggerSuccess(dbSuccess ? 'Skill guardado en Supabase' : 'Skill guardado en local');
+    showStatus(isSupabaseConfigured ? 'Skill guardado en Supabase' : 'Skill guardado en local');
   };
 
   const handleDeleteSkill = async (catId: string, skillName: string) => {
     setIsSaving(true);
-    let dbSuccess = false;
-    if (isSupabaseConfigured) {
-      dbSuccess = await deleteSkillFromSupabase(skillName, catId);
+    if (isSupabaseConfigured && !(await deleteSkillFromSupabase(skillName, catId))) {
+      return showDbError();
     }
 
-    const updated = skillCategories.map((cat) => {
-      if (cat.id === catId) {
-        return {
-          ...cat,
-          skills: cat.skills.filter((s) => s.name !== skillName),
-        };
-      }
-      return cat;
-    });
+    const updated = skillCategories.map((cat) =>
+      cat.id === catId ? { ...cat, skills: cat.skills.filter((s) => s.name !== skillName) } : cat
+    );
     onUpdateSkills(updated);
-    if (dbSuccess) await onReloadFromDb?.();
+    if (isSupabaseConfigured) await onReloadFromDb?.();
     setIsSaving(false);
-    triggerSuccess('Skill eliminado');
+    showStatus('Skill eliminado');
   };
 
-  const handleMoveSkill = (catId: string, index: number, direction: 'up' | 'down') => {
-    const updated = skillCategories.map((cat) => {
-      if (cat.id === catId) {
-        const skillsCopy = [...cat.skills];
-        const targetIndex = direction === 'up' ? index - 1 : index + 1;
-        if (targetIndex < 0 || targetIndex >= skillsCopy.length) return cat;
+  const handleMoveSkill = async (catId: string, index: number, direction: 'up' | 'down') => {
+    const category = skillCategories.find((cat) => cat.id === catId);
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (!category || targetIndex < 0 || targetIndex >= category.skills.length) return;
 
-        const temp = skillsCopy[index];
-        skillsCopy[index] = skillsCopy[targetIndex];
-        skillsCopy[targetIndex] = temp;
-        return { ...cat, skills: skillsCopy };
-      }
-      return cat;
-    });
+    const skillsCopy = [...category.skills];
+    [skillsCopy[index], skillsCopy[targetIndex]] = [skillsCopy[targetIndex], skillsCopy[index]];
 
-    onUpdateSkills(updated);
-    triggerSuccess('Orden de habilidades actualizado');
+    setIsSaving(true);
+    if (
+      isSupabaseConfigured &&
+      !(await reorderSkillsInSupabase(catId, skillsCopy.map((skill) => skill.name)))
+    ) {
+      return showDbError();
+    }
+
+    onUpdateSkills(
+      skillCategories.map((cat) => (cat.id === catId ? { ...cat, skills: skillsCopy } : cat))
+    );
+    if (isSupabaseConfigured) await onReloadFromDb?.();
+    setIsSaving(false);
+    showStatus('Orden de habilidades actualizado');
   };
 
   // ----------------------------------------------------------------------
@@ -276,7 +277,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       role: { es: projectRoleEs, en: projectRoleEn },
       period: projectPeriod,
       stack: projectStack.split(',').map((s) => s.trim()).filter(Boolean),
-      platforms: ['Web'],
+      // The form does not edit platforms or the mobile flag either: keep the
+      // stored values, otherwise saving Semanita would reset it to a web project.
+      platforms: existingProject?.platforms || ['Web'],
+      isMobileApp: existingProject?.isMobileApp ?? false,
       image: projectImage,
       demoUrl: projectDemoUrl || undefined,
       repoUrl: projectRepoUrl || undefined,
@@ -295,31 +299,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // Saving re-numbers the whole list: a new project is prepended, which shifts
     // the sort_order of every project after it.
-    let dbSuccess = false;
-    if (isSupabaseConfigured) {
-      dbSuccess = await syncProjectsToSupabase(updatedList);
+    if (isSupabaseConfigured && !(await syncProjectsToSupabase(updatedList))) {
+      return showDbError();
     }
 
     onUpdateProjects(updatedList);
-    if (dbSuccess) await onReloadFromDb?.();
+    if (isSupabaseConfigured) await onReloadFromDb?.();
     setShowProjectForm(false);
     setEditingProjectId(null);
     setIsSaving(false);
-    triggerSuccess(dbSuccess ? 'Proyecto guardado en Supabase' : 'Proyecto actualizado localmente');
+    showStatus(isSupabaseConfigured ? 'Proyecto guardado en Supabase' : 'Proyecto actualizado localmente');
   };
 
   const handleDeleteProject = async (projId: string) => {
     if (!confirm(language === 'es' ? '¿Eliminar este proyecto?' : 'Delete this project?')) return;
     setIsSaving(true);
-    let dbSuccess = false;
-    if (isSupabaseConfigured) {
-      dbSuccess = await deleteProjectFromSupabase(projId);
+    if (isSupabaseConfigured && !(await deleteProjectFromSupabase(projId))) {
+      return showDbError();
     }
-    const updated = projects.filter((p) => p.id !== projId);
-    onUpdateProjects(updated);
-    if (dbSuccess) await onReloadFromDb?.();
+    onUpdateProjects(projects.filter((p) => p.id !== projId));
+    if (isSupabaseConfigured) await onReloadFromDb?.();
     setIsSaving(false);
-    triggerSuccess('Proyecto eliminado');
+    showStatus('Proyecto eliminado');
   };
 
   const handleMoveProject = async (index: number, direction: 'up' | 'down') => {
@@ -331,13 +332,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     listCopy[index] = listCopy[targetIndex];
     listCopy[targetIndex] = temp;
 
-    onUpdateProjects(listCopy);
-
-    if (isSupabaseConfigured) {
-      const dbSuccess = await syncProjectsToSupabase(listCopy);
-      if (dbSuccess) await onReloadFromDb?.();
+    setIsSaving(true);
+    if (isSupabaseConfigured && !(await syncProjectsToSupabase(listCopy))) {
+      return showDbError();
     }
-    triggerSuccess('Orden de proyectos actualizado');
+
+    onUpdateProjects(listCopy);
+    if (isSupabaseConfigured) await onReloadFromDb?.();
+    setIsSaving(false);
+    showStatus('Orden de proyectos actualizado');
   };
 
   // ----------------------------------------------------------------------
@@ -347,14 +350,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     setIsSaving(true);
 
-    HERO_DATA.socials.email = profileEmail;
-    HERO_DATA.socials.github = profileGithub;
-    HERO_DATA.socials.gitlab = profileGitlab;
-    HERO_DATA.socials.linkedin = profileLinkedin;
-
-    let dbSuccess = false;
     if (isSupabaseConfigured) {
-      dbSuccess = await saveProfileToSupabase({
+      const ok = await saveProfileToSupabase({
         name: PROFILE_DATA.name,
         role_es: PROFILE_DATA.role.es,
         role_en: PROFILE_DATA.role.en,
@@ -372,12 +369,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         bio_es: [ABOUT_DATA.bio.es, ABOUT_DATA.bioSecondary.es].join('\n\n'),
         bio_en: [ABOUT_DATA.bio.en, ABOUT_DATA.bioSecondary.en].join('\n\n'),
       });
+      if (!ok) return showDbError();
     }
 
-    if (dbSuccess) await onReloadFromDb?.();
+    HERO_DATA.socials.email = profileEmail;
+    HERO_DATA.socials.github = profileGithub;
+    HERO_DATA.socials.gitlab = profileGitlab;
+    HERO_DATA.socials.linkedin = profileLinkedin;
+    if (isSupabaseConfigured) await onReloadFromDb?.();
 
     setIsSaving(false);
-    triggerSuccess(dbSuccess ? 'Perfil guardado en Supabase' : 'Perfil actualizado');
+    showStatus(isSupabaseConfigured ? 'Perfil guardado en Supabase' : 'Perfil actualizado');
   };
 
   return (
@@ -457,10 +459,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         {/* Status Notification */}
-        {saveSuccess && (
-          <div className="mx-6 mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs flex items-center gap-2 animate-fade-in">
-            <Check className="w-4 h-4 shrink-0" />
-            <span>{statusMessage}</span>
+        {status && (
+          <div
+            role={status.type === 'error' ? 'alert' : 'status'}
+            className={`mx-6 mt-4 p-3 rounded-xl text-xs flex items-center gap-2 animate-fade-in border ${
+              status.type === 'error'
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+            }`}
+          >
+            {status.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+            ) : (
+              <Check className="w-4 h-4 shrink-0" aria-hidden="true" />
+            )}
+            <span>{status.message}</span>
           </div>
         )}
 

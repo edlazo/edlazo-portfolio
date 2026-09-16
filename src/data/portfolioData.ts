@@ -199,6 +199,7 @@ export const FEATURED_PROJECTS: Project[] = [
     period: '2026',
     stack: ['React Native (Expo)', 'TypeScript', 'Express', 'Supabase', 'Google Gemini API'],
     platforms: ['iOS', 'Android', 'Web'],
+    isMobileApp: true,
     image: '/assets/semanita_app_mockup.webp',
     summary: {
       es: 'Aplicación móvil de planificación de comidas nacida de una necesidad personal. Utiliza IA de visión para analizar los ingredientes en tu heladera y generar un menú semanal organizado sin desperdiciar comida.',

@@ -56,7 +56,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
       }
 
       if (data?.session) {
-        localStorage.setItem('elias_is_admin', 'true');
         onLoginSuccess();
         onClose();
       }

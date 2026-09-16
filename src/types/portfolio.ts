@@ -27,6 +27,8 @@ export interface Project {
   period?: string;
   stack: string[];
   platforms: string[];
+  /** Rendered inside a phone mockup instead of a browser window. */
+  isMobileApp?: boolean;
   image: string;
   summary: { es: string; en: string };
   highlights: ProjectHighlight[];

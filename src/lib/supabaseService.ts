@@ -49,6 +49,18 @@ async function resolveCategoryId(categoryId: string): Promise<string | null> {
   return data.id as string;
 }
 
+// Row Level Security does not raise an error when it blocks an UPDATE or
+// DELETE (for example, an expired admin session): the request succeeds and
+// simply affects zero rows. Every write therefore asks for the affected rows
+// back and treats an empty result as a failure.
+function affectedRows(label: string, data: unknown[] | null): boolean {
+  if (data && data.length > 0) return true;
+  console.error(
+    `${label}: 0 rows affected. The admin session may have expired (RLS) or no row matched.`
+  );
+  return false;
+}
+
 // ----------------------------------------------------------------------
 // SKILLS OPERATIONS
 // ----------------------------------------------------------------------
@@ -100,7 +112,8 @@ export async function fetchSkillsFromSupabase(): Promise<SkillCategory[] | null>
 
 export async function saveSkillToSupabase(
   categoryId: string,
-  skill: { name: string; level: string; isPrimary?: boolean }
+  skill: { name: string; level: string; isPrimary?: boolean },
+  sortOrder?: number
 ): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
@@ -112,19 +125,23 @@ export async function saveSkillToSupabase(
     const resolvedCategoryId = await resolveCategoryId(categoryId);
     if (!resolvedCategoryId) return false;
 
-    const { error } = await supabase.from('skills').insert({
-      category_id: resolvedCategoryId,
-      name: skill.name,
-      level_es,
-      level_en,
-      is_primary: skill.isPrimary || false,
-    });
+    const { data, error } = await supabase
+      .from('skills')
+      .insert({
+        category_id: resolvedCategoryId,
+        name: skill.name,
+        level_es,
+        level_en,
+        is_primary: skill.isPrimary || false,
+        ...(typeof sortOrder === 'number' ? { sort_order: sortOrder } : {}),
+      })
+      .select('id');
 
     if (error) {
       console.error('Error inserting skill in Supabase:', error);
       return false;
     }
-    return true;
+    return affectedRows('Insert skill', data);
   } catch (e) {
     console.error('Failed to save skill to Supabase:', e);
     return false;
@@ -152,7 +169,7 @@ export async function updateSkillInSupabase(
     ]);
     if (!resolvedOldCategoryId || !resolvedCategoryId) return false;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('skills')
       .update({
         category_id: resolvedCategoryId,
@@ -162,13 +179,14 @@ export async function updateSkillInSupabase(
         is_primary: skill.isPrimary || false,
       })
       .eq('name', oldName)
-      .eq('category_id', resolvedOldCategoryId);
+      .eq('category_id', resolvedOldCategoryId)
+      .select('id');
 
     if (error) {
       console.error('Error updating skill in Supabase:', error);
       return false;
     }
-    return true;
+    return affectedRows('Update skill', data);
   } catch (e) {
     console.error('Failed to update skill in Supabase:', e);
     return false;
@@ -185,19 +203,53 @@ export async function deleteSkillFromSupabase(
     const resolvedCategoryId = await resolveCategoryId(categoryId);
     if (!resolvedCategoryId) return false;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('skills')
       .delete()
       .eq('name', skillName)
-      .eq('category_id', resolvedCategoryId);
+      .eq('category_id', resolvedCategoryId)
+      .select('id');
 
     if (error) {
       console.error('Error deleting skill from Supabase:', error);
       return false;
     }
-    return true;
+    return affectedRows('Delete skill', data);
   } catch (e) {
     console.error('Failed to delete skill from Supabase:', e);
+    return false;
+  }
+}
+
+export async function reorderSkillsInSupabase(
+  categoryId: string,
+  orderedNames: string[]
+): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return false;
+
+  try {
+    const resolvedCategoryId = await resolveCategoryId(categoryId);
+    if (!resolvedCategoryId) return false;
+    const client = supabase;
+
+    const results = await Promise.all(
+      orderedNames.map(async (name, index) => {
+        const { data, error } = await client
+          .from('skills')
+          .update({ sort_order: index + 1 })
+          .eq('name', name)
+          .eq('category_id', resolvedCategoryId)
+          .select('id');
+        if (error) {
+          console.error('Error reordering skill in Supabase:', name, error);
+          return false;
+        }
+        return affectedRows(`Reorder skill "${name}"`, data);
+      })
+    );
+    return results.every(Boolean);
+  } catch (e) {
+    console.error('Failed to reorder skills in Supabase:', e);
     return false;
   }
 }
@@ -235,6 +287,7 @@ export async function fetchProjectsFromSupabase(): Promise<Project[] | null> {
       period: p.period,
       stack: p.stack || [],
       platforms: p.platforms || [],
+      isMobileApp: Boolean(p.is_mobile_app),
       image: p.image_url,
       demoUrl: p.demo_url || undefined,
       repoUrl: p.repo_url || undefined,
@@ -267,6 +320,7 @@ export async function upsertProjectToSupabase(
       period: project.period,
       stack: project.stack,
       platforms: project.platforms,
+      is_mobile_app: Boolean(project.isMobileApp),
       image_url: project.image,
       demo_url: project.demoUrl,
       repo_url: project.repoUrl,
@@ -284,18 +338,18 @@ export async function upsertProjectToSupabase(
     let query;
     if (isUuid(project.id)) {
       payload.id = project.id;
-      query = supabase.from('projects').upsert(payload);
+      query = supabase.from('projects').upsert(payload).select('id');
     } else {
       payload.slug = project.id;
-      query = supabase.from('projects').upsert(payload, { onConflict: 'slug' });
+      query = supabase.from('projects').upsert(payload, { onConflict: 'slug' }).select('id');
     }
 
-    const { error } = await query;
+    const { data, error } = await query;
     if (error) {
       console.error('Error upserting project in Supabase:', error);
       return false;
     }
-    return true;
+    return affectedRows(`Upsert project "${project.title}"`, data);
   } catch (e) {
     console.error('Failed to upsert project in Supabase:', e);
     return false;
@@ -306,15 +360,16 @@ export async function deleteProjectFromSupabase(projectId: string): Promise<bool
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('projects')
       .delete()
-      .eq(isUuid(projectId) ? 'id' : 'slug', projectId);
+      .eq(isUuid(projectId) ? 'id' : 'slug', projectId)
+      .select('id');
     if (error) {
       console.error('Error deleting project from Supabase:', error);
       return false;
     }
-    return true;
+    return affectedRows('Delete project', data);
   } catch (e) {
     console.error('Failed to delete project from Supabase:', e);
     return false;
@@ -348,17 +403,15 @@ export async function saveProfileToSupabase(profile: Partial<DbProfile>): Promis
 
   try {
     const existing = await fetchProfileFromSupabase();
-    if (existing?.id) {
-      const { error } = await supabase
-        .from('profile')
-        .update({ ...profile, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from('profile').insert(profile);
-      if (error) throw error;
-    }
-    return true;
+    const { data, error } = existing?.id
+      ? await supabase
+          .from('profile')
+          .update({ ...profile, updated_at: new Date().toISOString() })
+          .eq('id', existing.id)
+          .select('id')
+      : await supabase.from('profile').insert(profile).select('id');
+    if (error) throw error;
+    return affectedRows('Save profile', data);
   } catch (e) {
     console.error('Error saving profile to Supabase:', e);
     return false;
