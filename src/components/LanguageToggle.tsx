@@ -18,7 +18,7 @@ export const LanguageToggle: React.FC = () => {
             ? 'bg-amber-500 text-slate-950 shadow-md scale-105'
             : 'text-slate-400 hover:text-white'
         }`}
-        aria-label="Switch to Spanish"
+        aria-label="ES - Español"
       >
         ES
       </button>
@@ -30,7 +30,7 @@ export const LanguageToggle: React.FC = () => {
             ? 'bg-amber-500 text-slate-950 shadow-md scale-105'
             : 'text-slate-400 hover:text-white'
         }`}
-        aria-label="Switch to English"
+        aria-label="EN - English"
       >
         EN
       </button>

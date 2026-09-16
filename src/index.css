@@ -33,6 +33,72 @@ code, pre, .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
 
+/* ---------------------------------------------------------------------------
+   Accessibility
+   --------------------------------------------------------------------------- */
+
+/* Visible keyboard focus for every interactive element (WCAG 2.4.7).
+   :focus-visible only fires for keyboard/AT navigation, so mouse users keep
+   the clean look. */
+a:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--accent-amber-light);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* Skip link: off-screen until focused, then pinned to the top-left. */
+.skip-link {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-160%);
+  padding: 0.65rem 1.1rem;
+  border-radius: 0.75rem;
+  background: var(--accent-amber);
+  color: #020617;
+  font-weight: 700;
+  font-size: 0.875rem;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.15s ease-in-out;
+}
+
+/* :focus (not :focus-visible) so the link also appears when focus is moved
+   programmatically or via a URL fragment, not only on a Tab press. */
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* Respect the OS "reduce motion" setting (WCAG 2.3.3 / 2.2.2): kill the
+   infinite ambient animations and collapse transitions to a near-instant
+   change instead of removing them, so state changes stay perceivable. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-pulse-slow {
+    animation: none !important;
+    opacity: 0.2;
+  }
+}
+
 /* Glassmorphism effects */
 .glass-panel {
   background: rgba(14, 21, 38, 0.7);

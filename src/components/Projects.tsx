@@ -62,7 +62,7 @@ export const Projects: React.FC<ProjectsProps> = ({ onSelectProject, projects = 
                           </span>
                         ))}
                         {project.period && (
-                          <span className="text-[11px] font-mono text-slate-500 ml-auto">
+                          <span className="text-[11px] font-mono text-slate-400 ml-auto">
                             {project.period}
                           </span>
                         )}
@@ -93,7 +93,7 @@ export const Projects: React.FC<ProjectsProps> = ({ onSelectProject, projects = 
                               <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
                               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
                             </div>
-                            <div className="mx-auto text-[10px] font-mono text-slate-500 bg-slate-950 px-3 py-0.5 rounded-md border border-slate-800/80">
+                            <div className="mx-auto text-[10px] font-mono text-slate-400 bg-slate-950 px-3 py-0.5 rounded-md border border-slate-800/80">
                               https://kairos.app
                             </div>
                           </div>

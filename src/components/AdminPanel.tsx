@@ -416,7 +416,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div
+          className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+          tabIndex={0}
+          role="region"
+          aria-label={language === 'es' ? 'Contenido del panel' : 'Panel content'}
+        >
           {/* SKILLS TAB */}
           {activeTab === 'skills' && (
             <div className="space-y-6">
@@ -728,7 +733,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div>
                       <h4 className="text-xs font-bold text-cyan-400 flex items-center gap-2">
                         {proj.title}
-                        <span className="text-[10px] text-slate-500 font-mono">#{idx + 1}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">#{idx + 1}</span>
                       </h4>
                       <p className="text-[11px] text-slate-400 mt-0.5">{t(proj.tagline)}</p>
                       <div className="flex flex-wrap gap-1.5 mt-2">

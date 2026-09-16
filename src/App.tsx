@@ -10,7 +10,7 @@ import { ContactModal } from './components/ContactModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { AdminPanel } from './components/AdminPanel';
 import { Footer } from './components/Footer';
-import { LanguageProvider } from './context/LanguageContext';
+import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import {
   SKILL_CATEGORIES as initialCategories,
   FEATURED_PROJECTS as initialProjects,
@@ -25,6 +25,7 @@ import {
 } from './lib/supabaseService';
 
 export function AppContent() {
+  const { language } = useLanguage();
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
@@ -105,6 +106,11 @@ export function AppContent() {
 
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 selection:bg-amber-500 selection:text-slate-950 font-sans">
+      {/* Skip link: first tab stop, lets keyboard users bypass the nav (WCAG 2.4.1) */}
+      <a href="#main-content" className="skip-link">
+        {language === 'es' ? 'Saltar al contenido principal' : 'Skip to main content'}
+      </a>
+
       {/* Top Navbar */}
       <Navbar
         onOpenContact={() => setIsContactOpen(true)}
@@ -113,7 +119,7 @@ export function AppContent() {
       />
 
       {/* Hero Section */}
-      <main>
+      <main id="main-content">
         <Hero onOpenContact={() => setIsContactOpen(true)} />
 
         {/* About & Story Section */}

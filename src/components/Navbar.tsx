@@ -41,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenContact, onOpenAdminLogin,
           {/* Brand / Logo */}
           <a
             href="#"
-            className="flex items-center gap-2.5 group focus:outline-none shrink-0"
+            className="flex items-center gap-2.5 group shrink-0"
           >
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:bg-amber-500/20 group-hover:scale-105 transition-all">
               <Terminal className="w-5 h-5" />
@@ -57,7 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenContact, onOpenAdminLogin,
           </a>
 
           {/* Desktop Nav Links */}
-          <nav className="hidden lg:flex items-center gap-7">
+          <nav className="hidden lg:flex items-center gap-7" aria-label="Principal">
             {navLinks.map((link) => (
               <a
                 key={link.href}
@@ -90,7 +90,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenContact, onOpenAdminLogin,
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
-              aria-label="Toggle Navigation"
+              aria-label={t({ es: 'Abrir menú de navegación', en: 'Toggle navigation menu' })}
+              aria-expanded={mobileMenuOpen}
+              aria-controls={mobileMenuOpen ? 'mobile-nav' : undefined}
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -100,8 +102,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenContact, onOpenAdminLogin,
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden glass-panel border-t border-slate-800/80 px-6 py-6 mt-3 space-y-4 animate-in fade-in slide-in-from-top-4">
-          <nav className="flex flex-col gap-4">
+        <div id="mobile-nav" className="lg:hidden glass-panel border-t border-slate-800/80 px-6 py-6 mt-3 space-y-4 animate-in fade-in slide-in-from-top-4">
+          <nav className="flex flex-col gap-4" aria-label="Principal (móvil)">
             {navLinks.map((link) => (
               <a
                 key={link.href}

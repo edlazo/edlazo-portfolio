@@ -70,11 +70,11 @@ export const Footer: React.FC = () => {
           </button>
         </div>
 
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-slate-500 gap-4">
+        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-slate-400 gap-4">
           <p>
             © {new Date().getFullYear()} Developer Portfolio. Built with Vite, React, TypeScript & Tailwind CSS.
           </p>
-          <p className="flex items-center gap-2">
+          <p className="flex items-center gap-2 text-slate-400">
             <span>Trunk-Based Delivery</span>
             <span>•</span>
             <span>WCAG AA Accessible</span>

@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import type { Project } from '../types/portfolio';
 import { useLanguage } from '../context/LanguageContext';
+import { useDialog } from '../hooks/useDialog';
 import { X, ShieldCheck, Server, Sparkles } from 'lucide-react';
 import { PhoneFrame } from './PhoneFrame';
 
@@ -11,22 +12,7 @@ interface ProjectModalProps {
 
 export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) => {
   const { t } = useLanguage();
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    if (project) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-      document.body.style.overflow = 'auto';
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [project, onClose]);
+  const dialogRef = useDialog(Boolean(project), onClose);
 
   if (!project) return null;
 
@@ -38,10 +24,18 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
       <div
         className="fixed inset-0 bg-slate-950/80 backdrop-blur-md"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Modal Dialog */}
-      <div className="relative w-full max-w-4xl max-h-[90vh] glass-panel bg-slate-900/95 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10 animate-in zoom-in-95 duration-200">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="project-modal-title"
+        tabIndex={-1}
+        className="relative w-full max-w-4xl max-h-[90vh] glass-panel bg-slate-900/95 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10 animate-in zoom-in-95 duration-200"
+      >
         {/* Header */}
         <div className="p-6 sm:p-8 border-b border-slate-800 flex items-start justify-between bg-slate-900/50">
           <div>
@@ -54,7 +48,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
               </span>
             </div>
 
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-white font-heading">
+            <h3 id="project-modal-title" className="text-2xl sm:text-3xl font-extrabold text-white font-heading">
               {project.title} — {t({ es: 'Blueprint de Arquitectura', en: 'Architectural Blueprint' })}
             </h3>
             <p className="text-sm text-slate-300 italic mt-1 font-medium">
@@ -65,14 +59,19 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
           <button
             onClick={onClose}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-            aria-label="Close modal"
+            aria-label={t({ es: 'Cerrar blueprint', en: 'Close blueprint' })}
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* Scrollable Body Content */}
-        <div className="p-6 sm:p-8 overflow-y-auto space-y-8 flex-1">
+        <div
+          className="p-6 sm:p-8 overflow-y-auto space-y-8 flex-1"
+          tabIndex={0}
+          role="region"
+          aria-label={t({ es: 'Detalle de la arquitectura', en: 'Architecture details' })}
+        >
           {/* Visual Showcase Banner / Phone Frame */}
           <div className="rounded-2xl overflow-hidden border border-slate-800 p-4 bg-slate-950 flex items-center justify-center">
             {isMobileApp ? (

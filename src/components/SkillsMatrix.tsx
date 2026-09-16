@@ -119,7 +119,7 @@ export const SkillsMatrix: React.FC<SkillsMatrixProps> = ({ categories = SKILL_C
                     )}
                     <span>{skill.name}</span>
                     {skill.level && (
-                      <span className="text-[10px] text-slate-500 font-mono">
+                      <span className="text-[10px] text-slate-400 font-mono">
                         ({skill.level})
                       </span>
                     )}

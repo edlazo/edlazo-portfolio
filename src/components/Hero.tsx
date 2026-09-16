@@ -32,7 +32,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenContact }) => {
             </div>
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
             <span className="text-slate-200 font-bold">{PROFILE_DATA.name}</span>
-            <span className="text-slate-600">|</span>
+            <span className="text-slate-400" aria-hidden="true">|</span>
             <span className="text-slate-300">{t(HERO_DATA.availability)}</span>
           </div>
 
