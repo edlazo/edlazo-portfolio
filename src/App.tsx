@@ -83,6 +83,23 @@ export function AppContent() {
     refreshFromSupabase();
   }, [refreshFromSupabase]);
 
+  // The browser tries to jump to a URL fragment (e.g. /#projects from the 404
+  // page or a shared link) before React has rendered the section, so retry once
+  // the page is on screen.
+  useEffect(() => {
+    let id = window.location.hash.slice(1);
+    try {
+      id = decodeURIComponent(id);
+    } catch {
+      // Malformed escape sequence: fall back to the raw fragment.
+    }
+    if (!id) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   const handleAdminTrigger = () => {
     if (isAdmin) {
       setIsAdminPanelOpen(true);

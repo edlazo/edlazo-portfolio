@@ -8,6 +8,7 @@ const __dirname = dirname(__filename);
 export default {
   content: [
     join(__dirname, 'index.html'),
+    join(__dirname, '404.html'),
     join(__dirname, 'src/**/*.{js,ts,jsx,tsx}'),
   ],
   theme: {
