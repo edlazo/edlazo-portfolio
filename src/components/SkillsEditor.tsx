@@ -857,7 +857,7 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({
       {/* Save bar */}
       <div
         className={`sticky bottom-0 -mx-6 -mb-6 px-6 py-3 border-t flex flex-wrap items-center justify-between gap-3 ${
-          dirty ? 'bg-[#1c1608] border-amber-500/50' : 'bg-slate-950 border-slate-800'
+          dirty ? 'bg-[#07201f] border-amber-500/50' : 'bg-slate-950 border-slate-800'
         }`}
       >
         <p className="text-xs" aria-live="polite">

@@ -3,17 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --bg-dark: #070a12;
-  --bg-card: #0e1526;
-  --bg-card-hover: #141e36;
+  --bg-dark: #0a0a0a;
+  --bg-card: #111110;
+  --bg-card-hover: #171714;
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(245, 158, 11, 0.3);
-  --accent-amber: #f59e0b;
-  --accent-amber-light: #fbbf24;
-  --accent-cyan: #06b6d4;
-  --accent-cyan-light: #22d3ee;
-  --text-main: #f1f5f9;
-  --text-muted: #94a3b8;
+  --border-glow: rgba(42, 217, 239, 0.3);
+  /* Kept under the old names so the component classes stay untouched:
+     "amber" is now the cyan accent and "cyan" the sand one. */
+  --accent-amber: #06b6d4;
+  --accent-amber-light: #2ad9ef;
+  --accent-cyan: #b3936a;
+  --accent-cyan-light: #cbb287;
+  --text-main: #e9e7e2;
+  --text-muted: #8d8b85;
 }
 
 body {
@@ -25,8 +27,38 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Display type: heavy grotesk, tight tracking. Section and hero titles are
+   set in caps like the reference design; card titles stay in sentence case so
+   long product names remain readable. */
 h1, h2, h3, h4, .font-heading {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Archivo', 'Plus Jakarta Sans', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+h1, h2 {
+  text-transform: uppercase;
+  letter-spacing: -0.015em;
+}
+
+/* Outlined display line, like the reference design. The fill stays a dim
+   version of the stroke colour so the text is still readable if
+   -webkit-text-stroke is unsupported. */
+.text-outline {
+  -webkit-text-stroke: 2px #e9e7e2;
+  color: rgba(233, 231, 226, 0.06);
+}
+
+@supports not (-webkit-text-stroke: 1px #000) {
+  .text-outline {
+    color: #e9e7e2;
+  }
+}
+
+/* Monospace, spaced-out caps for navigation and micro labels. */
+.font-label {
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 code, pre, .font-mono {
@@ -50,7 +82,7 @@ summary:focus-visible,
 [tabindex]:focus-visible {
   outline: 3px solid var(--accent-amber-light);
   outline-offset: 2px;
-  border-radius: 0.5rem;
+  border-radius: 0.125rem;
 }
 
 /* Skip link: off-screen until focused, then pinned to the top-left. */
@@ -61,7 +93,7 @@ summary:focus-visible,
   z-index: 100;
   transform: translateY(-160%);
   padding: 0.65rem 1.1rem;
-  border-radius: 0.75rem;
+  border-radius: 0.125rem;
   background: var(--accent-amber);
   color: #020617;
   font-weight: 700;
@@ -138,14 +170,14 @@ summary:focus-visible,
 
 /* Glassmorphism effects */
 .glass-panel {
-  background: rgba(14, 21, 38, 0.7);
+  background: rgba(17, 17, 16, 0.72);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle);
 }
 
 .glass-nav {
-  background: rgba(7, 10, 18, 0.85);
+  background: rgba(10, 10, 10, 0.88);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -153,32 +185,32 @@ summary:focus-visible,
 
 /* Glow effects */
 .glow-amber {
-  box-shadow: 0 0 30px -5px rgba(245, 158, 11, 0.25);
+  box-shadow: 0 0 30px -5px rgba(42, 217, 239, 0.25);
 }
 
 .glow-cyan {
-  box-shadow: 0 0 30px -5px rgba(6, 182, 212, 0.25);
+  box-shadow: 0 0 30px -5px rgba(203, 178, 135, 0.22);
 }
 
 .glow-card:hover {
-  box-shadow: 0 10px 30px -10px rgba(245, 158, 11, 0.15), 0 0 1px 1px rgba(245, 158, 11, 0.3);
+  box-shadow: 0 10px 30px -10px rgba(42, 217, 239, 0.15), 0 0 1px 1px rgba(42, 217, 239, 0.3);
 }
 
 /* Gradient Text */
 .gradient-text-amber {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+  background: linear-gradient(135deg, #8ae9f7 0%, #2ad9ef 50%, #06b6d4 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .gradient-text-cyan {
-  background: linear-gradient(135deg, #38bdf8 0%, #06b6d4 50%, #0284c7 100%);
+  background: linear-gradient(135deg, #e6d7bd 0%, #cbb287 50%, #b3936a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .gradient-text-mixed {
-  background: linear-gradient(135deg, #f59e0b 0%, #38bdf8 100%);
+  background: linear-gradient(135deg, #2ad9ef 0%, #cbb287 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -189,16 +221,16 @@ summary:focus-visible,
 }
 
 ::-webkit-scrollbar-track {
-  background: #070a12;
+  background: #0a0a0a;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: #2a2a27;
+  border-radius: 0;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #3d3c38;
 }
 
 /* Animated gradient backgrounds */

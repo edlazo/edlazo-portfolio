@@ -2,7 +2,7 @@ import type { SkillCategory, Project, PhilosophyItem } from '../types/portfolio'
 
 export const PROFILE_DATA = {
   name: 'Elias',
-  fullName: 'Elias',
+  fullName: 'Elias Demian Lazo',
   role: {
     es: 'Backend & AI Engineer',
     en: 'Backend & AI Engineer',
@@ -23,14 +23,20 @@ export const PROFILE_DATA = {
 };
 
 export const HERO_DATA = {
-  greeting: {
-    es: 'Hola, soy',
-    en: "Hi, I'm",
-  },
   name: 'Elias',
+  // Short form for the hero byline, next to the full name.
+  shortLocation: {
+    es: 'Buenos Aires, ARG',
+    en: 'Buenos Aires, ARG',
+  },
   headline: {
-    es: 'Fullstack & Backend Engineer',
-    en: 'Fullstack & Backend Engineer',
+    es: 'Backend & AI Engineer',
+    en: 'Backend & AI Engineer',
+  },
+  // Second display line, rendered as outlined type.
+  headlineAccent: {
+    es: 'Arquitectura & Integraciones de IA',
+    en: 'Architecture & AI Integrations',
   },
   subheadline: {
     es: 'De la curiosidad al impacto: construyendo software práctico, APIs robustas e integraciones de IA para resolver problemas reales del día a día.',

@@ -22,33 +22,25 @@ export const Hero: React.FC<HeroProps> = ({ onOpenContact }) => {
         <div className="max-w-4xl">
           <Reveal aboveTheFold>
             {/* Status & Profile Chip */}
-            <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900/90 border border-slate-700/80 text-amber-400 text-xs font-mono mb-8 shadow-inner">
-              <div className="relative w-6 h-6 rounded-full overflow-hidden border border-amber-500/50 shrink-0">
-                <img
-                  src={PROFILE_DATA.avatar}
-                  alt={PROFILE_DATA.name}
-                  loading="eager"
-                  decoding="async"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span className="text-slate-200 font-bold">{PROFILE_DATA.name}</span>
-              <span className="text-slate-400" aria-hidden="true">|</span>
-              <span className="text-slate-300">{t(HERO_DATA.availability)}</span>
+            <div className="inline-flex items-center gap-3 text-amber-400 text-xs font-label mb-8">
+              <span className="w-2.5 h-2.5 bg-amber-400 shrink-0" aria-hidden="true" />
+              <span>{t(HERO_DATA.availability)}</span>
             </div>
 
             {/* Main Headline with Elias Name */}
             <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.1] mb-6">
-              <span className="block text-slate-300 text-2xl sm:text-4xl font-semibold mb-2">
-                {t(HERO_DATA.greeting)}{' '}
-                <span className="text-amber-400 font-bold">{HERO_DATA.name}</span>
+              <span className="block text-cyan-400 text-xs sm:text-sm font-label font-medium mb-5">
+                {PROFILE_DATA.fullName} <span aria-hidden="true">·</span> {t(HERO_DATA.shortLocation)}
               </span>
               <span className="block text-white font-extrabold">
                 {t(HERO_DATA.headline)}
               </span>
-              <span className="gradient-text-amber block mt-2 text-3xl sm:text-5xl lg:text-6xl">
-                APIs, Mobile & AI Security
+              <span
+                className="block w-40 sm:w-72 h-1 bg-amber-400 my-3"
+                aria-hidden="true"
+              />
+              <span className="text-outline block text-3xl sm:text-5xl lg:text-6xl">
+                {t(HERO_DATA.headlineAccent)}
               </span>
             </h1>
 
@@ -63,7 +55,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenContact }) => {
             <div className="flex flex-wrap items-center gap-4 mb-12">
               <a
                 href="#projects"
-                className="px-6 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-base transition-all shadow-xl shadow-amber-500/20 hover:shadow-amber-500/35 hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2.5"
+                className="px-6 py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-label font-bold text-sm transition-all hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2.5"
               >
                 <span>{t({ es: 'Ver Proyectos', en: 'View Projects' })}</span>
                 <ArrowRight className="w-5 h-5" />
@@ -71,7 +63,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenContact }) => {
 
               <button
                 onClick={onOpenContact}
-                className="px-6 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-200 font-semibold text-base transition-all hover:border-amber-500/50 hover:text-white hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
+                className="px-6 py-3.5 bg-transparent hover:bg-amber-500/10 border border-amber-500/60 text-amber-400 font-label font-semibold text-sm transition-all hover:border-amber-400 hover:text-amber-300 hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
               >
                 <Mail className="w-5 h-5 text-amber-400" />
                 <span>{t({ es: 'Contactarme', en: 'Get in Touch' })}</span>

@@ -145,7 +145,7 @@ export function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070a12] text-slate-100 selection:bg-amber-500 selection:text-slate-950 font-sans">
+    <div className="min-h-screen bg-[#0a0a0a] text-slate-100 selection:bg-amber-500 selection:text-slate-950 font-sans">
       {/* Skip link: first tab stop, lets keyboard users bypass the nav (WCAG 2.4.1) */}
       <a href="#main-content" className="skip-link">
         {language === 'es' ? 'Saltar al contenido principal' : 'Skip to main content'}

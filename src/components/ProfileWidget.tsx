@@ -29,7 +29,7 @@ export const ProfileWidget: React.FC<ProfileWidgetProps> = ({ onOpenAdminLogin, 
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-full bg-slate-900 border border-slate-700/80 hover:border-amber-500/50 transition-all group shadow-md"
+        className="flex items-center gap-2.5 px-2.5 py-1.5 bg-slate-900 border border-slate-700/80 hover:border-amber-500/50 transition-all group shadow-md"
         aria-label={t({ es: 'Abrir tarjeta de perfil', en: 'Toggle profile card' })}
         aria-expanded={isOpen}
         aria-haspopup="true"
@@ -58,7 +58,7 @@ export const ProfileWidget: React.FC<ProfileWidgetProps> = ({ onOpenAdminLogin, 
 
       {/* Profile Card Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 bg-[#0c111d] border border-slate-700/90 rounded-3xl p-5 shadow-2xl z-50 origin-top-right animate-dropdown-in">
+        <div className="absolute right-0 mt-3 w-80 bg-[#111110] border border-slate-700/90 rounded-3xl p-5 shadow-2xl z-50 origin-top-right animate-dropdown-in">
           <div className="flex items-center gap-3.5 pb-4 border-b border-slate-800">
             <div className="relative w-14 h-14 rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-lg shrink-0">
               <img

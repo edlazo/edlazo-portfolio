@@ -278,7 +278,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-2xl bg-[#0b0f19] border-l border-cyan-500/30 h-full flex flex-col text-slate-100 shadow-2xl animate-drawer-in">
+      <div className="relative w-full max-w-2xl bg-[#0d0d0c] border-l border-cyan-500/30 h-full flex flex-col text-slate-100 shadow-2xl animate-drawer-in">
         {/* Header */}
         <div className="p-6 bg-slate-900/90 border-b border-slate-800 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -322,7 +322,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             onClick={() => setActiveTab('skills')}
             className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'skills'
-                ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
+                ? 'bg-[#0d0d0c] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -341,7 +341,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             onClick={() => setActiveTab('projects')}
             className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'projects'
-                ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
+                ? 'bg-[#0d0d0c] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -352,7 +352,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             onClick={() => setActiveTab('profile')}
             className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'profile'
-                ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
+                ? 'bg-[#0d0d0c] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -364,7 +364,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             onClick={() => setActiveTab('messages')}
             className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-t-xl text-xs font-semibold transition-all border-t border-x shrink-0 whitespace-nowrap ${
               activeTab === 'messages'
-                ? 'bg-[#0b0f19] border-cyan-500/40 text-cyan-400'
+                ? 'bg-[#0d0d0c] border-cyan-500/40 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >

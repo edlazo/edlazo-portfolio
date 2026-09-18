@@ -28,7 +28,7 @@ export const NotFound: React.FC = () => {
   }, [t]);
 
   return (
-    <div className="min-h-screen bg-[#070a12] text-slate-100 font-sans flex flex-col relative overflow-hidden selection:bg-amber-500 selection:text-slate-950">
+    <div className="min-h-screen bg-[#0a0a0a] text-slate-100 font-sans flex flex-col relative overflow-hidden selection:bg-amber-500 selection:text-slate-950">
       {/* Background Ambient Glows */}
       <div
         className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-amber-500/10 rounded-full blur-[120px] pointer-events-none animate-pulse-slow"
