@@ -4,10 +4,7 @@ import { Hero } from './components/Hero';
 import { About } from './components/About';
 import { SkillsMatrix } from './components/SkillsMatrix';
 import { Projects } from './components/Projects';
-import { ProjectModal } from './components/ProjectModal';
 import { EngineeringPhilosophy } from './components/EngineeringPhilosophy';
-import { ContactModal } from './components/ContactModal';
-import { AdminLoginModal } from './components/AdminLoginModal';
 import { Footer } from './components/Footer';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import {
@@ -16,17 +13,41 @@ import {
   HERO_DATA,
 } from './data/portfolioData';
 import type { Project, SkillCategory } from './types/portfolio';
-import { supabase } from './lib/supabase';
-import {
-  fetchSkillsFromSupabase,
-  fetchProjectsFromSupabase,
-  fetchProfileFromSupabase,
-} from './lib/supabaseService';
+import { isSupabaseConfigured } from './lib/supabaseEnv';
+
+// Both the SDK and the queries are loaded after the first paint.
+const loadSupabase = () => import('./lib/supabase');
+const loadSupabaseService = () => import('./lib/supabaseService');
+
+// The page sections are part of the prerendered HTML, so they are imported
+// normally (together they are only a few KB). The dialogs are not in the
+// initial markup, so they stay in their own chunks and are prefetched while
+// the browser is idle.
+const loadProjectModal = () => import('./components/ProjectModal');
+const loadContactModal = () => import('./components/ContactModal');
+const loadAdminLogin = () => import('./components/AdminLoginModal');
+
+const ProjectModal = lazy(() => loadProjectModal().then((m) => ({ default: m.ProjectModal })));
+const ContactModal = lazy(() => loadContactModal().then((m) => ({ default: m.ContactModal })));
+const AdminLoginModal = lazy(() => loadAdminLogin().then((m) => ({ default: m.AdminLoginModal })));
 
 // The admin panel (and the drag & drop library it uses) is only downloaded
 // when it's opened, so regular visitors never pay for it.
 const loadAdminPanel = () => import('./components/AdminPanel');
 const AdminPanel = lazy(() => loadAdminPanel().then((module) => ({ default: module.AdminPanel })));
+
+// Runs after the page has finished loading and the browser is idle, so the
+// deferred chunks never compete with the fonts and scripts of the first paint.
+const whenIdle = (task: () => void) => {
+  const schedule = () => {
+    const idle = (window as typeof window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number })
+      .requestIdleCallback;
+    if (idle) idle(task, { timeout: 3000 });
+    else setTimeout(task, 300);
+  };
+  if (document.readyState === 'complete') schedule();
+  else window.addEventListener('load', schedule, { once: true });
+};
 
 export function AppContent() {
   const { language } = useLanguage();
@@ -37,15 +58,25 @@ export function AppContent() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Dynamic portfolio state (persisted locally / synced with Supabase)
-  const [skillCategories, setSkillCategories] = useState<SkillCategory[]>(() => {
-    const saved = localStorage.getItem('elias_skills');
-    return saved ? JSON.parse(saved) : initialCategories;
-  });
+  // The page is prerendered at build time, so the first render has to match
+  // the server output: the cached copy is read after mount, not during render.
+  const [skillCategories, setSkillCategories] = useState<SkillCategory[]>(initialCategories);
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
 
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem('elias_projects');
-    return saved ? JSON.parse(saved) : initialProjects;
-  });
+  useEffect(() => {
+    const read = <T,>(key: string): T | null => {
+      try {
+        const saved = localStorage.getItem(key);
+        return saved ? (JSON.parse(saved) as T) : null;
+      } catch {
+        return null;
+      }
+    };
+    const savedSkills = read<SkillCategory[]>('elias_skills');
+    if (savedSkills?.length) setSkillCategories(savedSkills);
+    const savedProjects = read<Project[]>('elias_projects');
+    if (savedProjects?.length) setProjects(savedProjects);
+  }, []);
 
   const handleUpdateSkills = useCallback((updatedCategories: SkillCategory[]) => {
     setSkillCategories(updatedCategories);
@@ -61,6 +92,9 @@ export function AppContent() {
   // again after every successful write from the AdminPanel, so the panel shows
   // what the database actually stored instead of its own optimistic state.
   const refreshFromSupabase = useCallback(async () => {
+    if (!isSupabaseConfigured) return;
+    const { fetchSkillsFromSupabase, fetchProjectsFromSupabase, fetchProfileFromSupabase } =
+      await loadSupabaseService();
     const [remoteSkills, remoteProjects, remoteProfile] = await Promise.all([
       fetchSkillsFromSupabase(),
       fetchProjectsFromSupabase(),
@@ -81,8 +115,11 @@ export function AppContent() {
     }
   }, [handleUpdateSkills, handleUpdateProjects]);
 
+  // The page renders from local data first; the live refresh is not urgent.
   useEffect(() => {
-    refreshFromSupabase();
+    whenIdle(() => {
+      void refreshFromSupabase();
+    });
   }, [refreshFromSupabase]);
 
   // Admin mode follows the real Supabase Auth session, not a local flag: the
@@ -92,14 +129,27 @@ export function AppContent() {
   useEffect(() => {
     // Legacy flag from the previous implementation; it no longer means anything.
     localStorage.removeItem('elias_is_admin');
-    if (!supabase) return;
+    if (!isSupabaseConfigured) return;
 
-    supabase.auth.getSession().then(({ data }) => setIsAdmin(Boolean(data.session)));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAdmin(Boolean(session));
-      if (!session) setIsAdminPanelOpen(false);
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    loadSupabase().then(({ supabase }) => {
+      if (cancelled || !supabase) return;
+      supabase.auth.getSession().then(({ data }) => {
+        if (!cancelled) setIsAdmin(Boolean(data.session));
+      });
+      const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+        setIsAdmin(Boolean(session));
+        if (!session) setIsAdminPanelOpen(false);
+      });
+      unsubscribe = () => listener.subscription.unsubscribe();
     });
-    return () => listener.subscription.unsubscribe();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, []);
 
   // The browser tries to jump to a URL fragment (e.g. /#projects from the 404
@@ -113,15 +163,33 @@ export function AppContent() {
       // Malformed escape sequence: fall back to the raw fragment.
     }
     if (!id) return;
-    const frame = requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView();
-    });
+    // The target section is lazy-loaded, so poll briefly until it mounts.
+    const deadline = Date.now() + 5000;
+    let frame = 0;
+    const tryScroll = () => {
+      const target = document.getElementById(id);
+      if (target) {
+        target.scrollIntoView();
+        return;
+      }
+      if (Date.now() < deadline) frame = requestAnimationFrame(tryScroll);
+    };
+    frame = requestAnimationFrame(tryScroll);
     return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
     if (isAdmin) loadAdminPanel();
   }, [isAdmin]);
+
+  // Warm the deferred chunks once the page is interactive.
+  useEffect(() => {
+    whenIdle(() => {
+      void loadContactModal();
+      void loadProjectModal();
+      void loadAdminLogin();
+    });
+  }, []);
 
   const handleAdminTrigger = () => {
     if (isAdmin) {
@@ -137,8 +205,9 @@ export function AppContent() {
   };
 
   const handleLogout = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
+    if (isSupabaseConfigured) {
+      const { supabase } = await loadSupabase();
+      await supabase?.auth.signOut();
     }
     setIsAdmin(false);
     setIsAdminPanelOpen(false);
@@ -179,21 +248,29 @@ export function AppContent() {
       <Footer />
 
       {/* Modals & Drawers */}
-      <ProjectModal
-        project={selectedProject}
-        onClose={() => setSelectedProject(null)}
-      />
+      <Suspense fallback={null}>
+        {selectedProject && (
+          <ProjectModal
+            project={selectedProject}
+            onClose={() => setSelectedProject(null)}
+          />
+        )}
 
-      <ContactModal
-        isOpen={isContactOpen}
-        onClose={() => setIsContactOpen(false)}
-      />
+        {isContactOpen && (
+          <ContactModal
+            isOpen={isContactOpen}
+            onClose={() => setIsContactOpen(false)}
+          />
+        )}
 
-      <AdminLoginModal
-        isOpen={isAdminLoginOpen}
-        onClose={() => setIsAdminLoginOpen(false)}
-        onLoginSuccess={handleLoginSuccess}
-      />
+        {isAdminLoginOpen && (
+          <AdminLoginModal
+            isOpen={isAdminLoginOpen}
+            onClose={() => setIsAdminLoginOpen(false)}
+            onLoginSuccess={handleLoginSuccess}
+          />
+        )}
+      </Suspense>
 
       {isAdminPanelOpen && (
         <Suspense

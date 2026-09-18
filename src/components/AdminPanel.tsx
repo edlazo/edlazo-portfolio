@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { X, Plus, Trash2, LogOut, Check, AlertCircle, Sparkles, FolderGit2, Cpu, User, Loader2, Save, Pencil, ChevronUp, ChevronDown, Inbox } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import type { SkillCategory, Project } from '../types/portfolio';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { isSupabaseConfigured } from '../lib/supabaseEnv';
 import {
   upsertProjectToSupabase,
   deleteProjectFromSupabase,

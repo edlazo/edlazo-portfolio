@@ -21,7 +21,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, ChevronUp, FolderPlus, GripVertical, Loader2, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { isSupabaseConfigured } from '../lib/supabaseEnv';
 import { saveSkillChangesToSupabase } from '../lib/supabaseService';
 import { CATEGORY_ICONS, CategoryIcon, DEFAULT_CATEGORY_ICON } from '../lib/categoryIcons';
 import {

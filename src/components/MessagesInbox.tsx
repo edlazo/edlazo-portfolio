@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Loader2, Mail, MailOpen, RefreshCw, Reply, Trash2 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { isSupabaseConfigured } from '../lib/supabaseEnv';
 import {
   deleteContactMessage,
   fetchContactMessages,
