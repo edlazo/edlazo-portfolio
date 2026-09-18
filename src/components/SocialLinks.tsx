@@ -26,14 +26,14 @@ export const SocialLinks: React.FC<{ className?: string }> = ({ className = '' }
           key={key}
           href={href}
           {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-          className="group flex items-center gap-2 px-3 py-2 border border-slate-800 text-slate-300 hover:text-white hover:border-amber-500/60 hover:bg-amber-500/5 transition-all text-xs font-label"
+          className="group flex items-center gap-2 px-3 py-2 border border-slate-800 text-slate-300 transition-all text-xs font-label hover:text-white hover:border-amber-400 hover:bg-amber-500/10"
         >
           <Icon className="w-4 h-4 shrink-0 text-slate-400 group-hover:text-amber-400 transition-colors" />
           <span>{label}</span>
           {external && (
             <>
               <ArrowUpRight
-                className="w-3.5 h-3.5 shrink-0 text-slate-500 group-hover:text-amber-400 transition-colors"
+                className="w-3.5 h-3.5 shrink-0 text-slate-500 transition-all group-hover:text-amber-400 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
                 aria-hidden="true"
               />
               <span className="sr-only">
