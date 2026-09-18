@@ -7,7 +7,9 @@ export const PROFILE_DATA = {
     es: 'Backend & AI Engineer',
     en: 'Backend & AI Engineer',
   },
-  avatar: '/assets/elias_profile_photo.webp',
+  // Small copy: it is never shown larger than 92 px. The full-size file is
+  // still used as the social preview image in index.html.
+  avatar: '/assets/elias_profile_photo_sm.webp',
   location: {
     es: 'Buenos Aires, Argentina',
     en: 'Buenos Aires, Argentina',
